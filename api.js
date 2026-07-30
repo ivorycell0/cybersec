@@ -11,6 +11,13 @@ function ghApiUrl() {
   return 'https://api.github.com/repos/' + GH_OWNER + '/' + GH_REPO + '/contents/data.json';
 }
 
+function ghHeaders(method) {
+  var h = { 'Accept': 'application/vnd.github.v3+json' };
+  if (GH_TOKEN) h['Authorization'] = 'token ' + GH_TOKEN;
+  if (method === 'PUT') h['Content-Type'] = 'application/json';
+  return h;
+}
+
 function btoaUTF8(str) {
   var bytes = [];
   for (var i = 0; i < str.length; i++) {
@@ -30,9 +37,7 @@ function atobUTF8(b64) {
 }
 
 function readData() {
-  return fetch(ghApiUrl(), {
-    headers: { 'Authorization': 'token ' + GH_TOKEN, 'Accept': 'application/vnd.github.v3+json' }
-  }).then(function(r) {
+  return fetch(ghApiUrl(), { headers: ghHeaders() }).then(function(r) {
     if (r.status === 404) {
       var initial = { users: [], chat: [], pastes: [], tickets: [], visitors: 0 };
       return writeDataRaw(initial).then(function() { _dataCache = initial; return initial; });
@@ -55,7 +60,7 @@ function writeDataRaw(data) {
   if (_dataSha) body.sha = _dataSha;
   return fetch(ghApiUrl(), {
     method: 'PUT',
-    headers: { 'Authorization': 'token ' + GH_TOKEN, 'Content-Type': 'application/json', 'Accept': 'application/vnd.github.v3+json' },
+    headers: ghHeaders('PUT'),
     body: JSON.stringify(body)
   }).then(function(r) {
     if (r.status === 409) {
