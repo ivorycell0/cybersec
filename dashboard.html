@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cybersec | Admin Panel</title>
     <link rel="stylesheet" href="style.css">
-    <script>if(!localStorage.getItem('cybersec-token')){location.href='login.html';}</script>
+    <script>if(!localStorage.getItem('cybersec-session')){location.href='login.html';}</script>
     <style>
         .admin-tabs { display:flex;gap:0.5rem;margin-bottom:2rem;flex-wrap:wrap;justify-content:center; }
         .admin-tab { background:none;border:1px solid var(--glass-border);color:var(--text-muted);padding:0.5rem 1.2rem;font-size:0.7rem;letter-spacing:1.5px;cursor:pointer;transition:0.2s;border-radius:8px;text-transform:uppercase; }
@@ -553,7 +553,7 @@
         });
     </script>
     <script>
-        var _tok = localStorage.getItem('cybersec-token');
+        var _tok = localStorage.getItem('cybersec-session');
         if (_tok) {
             document.querySelectorAll('.nav-links a[href="login.html"]').forEach(function(el) { el.remove(); });
             apiGetUsers().then(function(users) {

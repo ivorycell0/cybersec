@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cybersec | Login</title>
     <link rel="stylesheet" href="style.css">
-    <script>if(localStorage.getItem('cybersec-token')){location.href='index.html';}</script>
+    <script>if(localStorage.getItem('cybersec-session')){location.href='index.html';}</script>
 </head>
 <body>
     <canvas id="snowfall"></canvas>
@@ -51,6 +51,10 @@
                         <label for="login-pass2">CONFIRM PASSWORD</label>
                         <input type="password" id="login-pass2" placeholder="Confirm password" autocomplete="new-password">
                     </div>
+                    <div class="login-field" id="token-field">
+                        <label for="login-token">GITHUB TOKEN</label>
+                        <input type="password" id="login-token" placeholder="ghp_..." autocomplete="off">
+                    </div>
                     <button type="submit" class="btn-neon" id="login-btn">Authenticate</button>
                     <p class="login-error" id="login-error"></p>
                 </form>
@@ -84,10 +88,13 @@
         const statusEl = document.getElementById('login-status');
         let mode = 'login';
 
+        var tokenField = document.getElementById('token-field');
+        var tokenInput = document.getElementById('login-token');
+
         function updateUI() {
-            const token = localStorage.getItem('cybersec-token');
             const session = localStorage.getItem('cybersec-session');
-            if (token && session) {
+            tokenField.style.display = localStorage.getItem('gh-token') ? 'none' : 'block';
+            if (session) {
                 statusEl.innerHTML = '';
                 const check = document.createElement('span');
                 check.textContent = '\u2713 logged in as ';
@@ -145,7 +152,17 @@
             const user = document.getElementById('login-user').value.trim();
             const pass = document.getElementById('login-pass').value.trim();
             const pass2 = document.getElementById('login-pass2').value.trim();
+            const ghToken = tokenInput.value.trim();
             errEl.style.color = '#ff0000';
+
+            if (!localStorage.getItem('gh-token') && !ghToken) {
+                errEl.textContent = '[!] GitHub token required';
+                return;
+            }
+            if (ghToken) {
+                localStorage.setItem('gh-token', ghToken);
+                GH_TOKEN = ghToken;
+            }
 
             if (!user || !pass) {
                 errEl.textContent = '[!] both fields required';

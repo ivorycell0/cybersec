@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cybersec | Tickets</title>
     <link rel="stylesheet" href="style.css">
-    <script>if(!localStorage.getItem('cybersec-token')){location.href='login.html';}</script>
+    <script>if(!localStorage.getItem('cybersec-session')){location.href='login.html';}</script>
 </head>
 <body>
     <canvas id="snowfall"></canvas>
@@ -244,7 +244,7 @@
         loadUsers().then(function() { return loadTickets(); }).then(function() { renderTickets('all'); });
     </script>
     <script>
-        var _tok2 = localStorage.getItem('cybersec-token');
+        var _tok2 = localStorage.getItem('cybersec-session');
         if (_tok2) {
             document.querySelectorAll('.nav-links a[href="login.html"]').forEach(function(el) { el.remove(); });
         }

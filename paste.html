@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cybersec | Paste</title>
     <link rel="stylesheet" href="style.css">
-    <script>if(!localStorage.getItem('cybersec-token')){location.href='login.html';}</script>
+    <script>if(!localStorage.getItem('cybersec-session')){location.href='login.html';}</script>
 </head>
 <body>
     <canvas id="snowfall"></canvas>
@@ -402,7 +402,7 @@
         }
     </script>
     <script>
-        var _tok = localStorage.getItem('cybersec-token');
+        var _tok = localStorage.getItem('cybersec-session');
         if (_tok) {
             document.querySelectorAll('.nav-links a[href="login.html"]').forEach(function(el) { el.remove(); });
             apiGetUsers().then(function(users) {
