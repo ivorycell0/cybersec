@@ -113,6 +113,13 @@
             return Math.floor(d / 86400) + 'd ago';
         }
 
+        function canDelete(author) {
+            if (!session) return false;
+            if (session.toLowerCase() === author.toLowerCase()) return true;
+            var myRole = getUserRole(session);
+            return ['owner','co-owner','dev','admin'].indexOf(myRole) !== -1;
+        }
+
         function renderPosts(posts, isStaff) {
             var weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
             var filtered = showAllHistory ? posts : posts.filter(function(p) { return p.time > weekAgo; });
@@ -133,7 +140,7 @@
                         tag +
                         '<span class="chat-msg-author" style="color:' + color + '">' + p.author + '</span>' +
                         '<span class="chat-msg-time">' + timeAgo(p.time) + '</span>' +
-                        (isYou || session === 'cs' ? '<button class="chat-msg-del" data-id="' + p.id + '" title="Delete">&#10005;</button>' : '') +
+                        (canDelete(p.author) ? '<button class="chat-msg-del" data-id="' + p.id + '" title="Delete">&#10005;</button>' : '') +
                     '</div>' +
                     '<div class="chat-msg-content">' + p.content.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>') + '</div>' +
                 '</div>';

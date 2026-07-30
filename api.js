@@ -1,10 +1,10 @@
 /* Cybersec API — calls Netlify Function which proxies to GitHub */
 var API_BASE = '/api';
 var _dataCache = null;
-var _pendingSave = false;
+var _saveQueue = Promise.resolve();
 
-function loadData() {
-  if (_dataCache) return Promise.resolve(_dataCache);
+function loadData(force) {
+  if (_dataCache && !force) return Promise.resolve(_dataCache);
   return fetch(API_BASE).then(function(r) {
     if (!r.ok) throw new Error('Failed to load');
     return r.json().then(function(d) {
@@ -20,17 +20,17 @@ function loadData() {
 }
 
 function saveData() {
-  if (_pendingSave) return;
-  _pendingSave = true;
-  fetch(API_BASE, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: _dataCache })
-  }).then(function(r) {
-    _pendingSave = false;
-  }).catch(function() {
-    _pendingSave = false;
+  _saveQueue = _saveQueue.then(function() {
+    return fetch(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: _dataCache })
+    }).then(function(r) {
+      if (!r.ok) throw new Error('Save failed');
+      return r.json();
+    });
   });
+  return _saveQueue;
 }
 
 function apiLogin(username, password) {
@@ -51,8 +51,7 @@ function apiSignup(username, password) {
       throw new Error('Username taken');
     }
     data.users.push({ username: username, password: password, role: 'regular' });
-    saveData();
-    return { success: true };
+    return saveData().then(function() { return { success: true }; });
   });
 }
 
@@ -73,14 +72,14 @@ function apiUpdateUser(username, updates) {
     if (!u) throw new Error('User not found');
     var allowed = ['role', 'tagStyle', 'tagColor', 'customTag'];
     allowed.forEach(function(k) { if (updates[k] !== undefined) u[k] = updates[k]; });
-    saveData();
+    return saveData();
   });
 }
 
 function apiDeleteUser(username) {
   return loadData().then(function(data) {
     data.users = data.users.filter(function(x) { return x.username.toLowerCase() !== username.toLowerCase(); });
-    saveData();
+    return saveData();
   });
 }
 
@@ -92,15 +91,14 @@ function apiPostChat(content) {
   return loadData().then(function(data) {
     var msg = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), author: localStorage.getItem('cybersec-session'), content: content, time: Date.now() };
     data.chat.push(msg);
-    saveData();
-    return msg;
+    return saveData().then(function() { return msg; });
   });
 }
 
 function apiDeleteChat(id) {
   return loadData().then(function(data) {
     data.chat = data.chat.filter(function(m) { return m.id !== id; });
-    saveData();
+    return saveData();
   });
 }
 
@@ -112,8 +110,7 @@ function apiCreatePaste(title, content, anonymous) {
   return loadData().then(function(data) {
     var paste = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), author: localStorage.getItem('cybersec-session'), title: title, content: content, time: Date.now(), anonymous: !!anonymous, deleted: false, comments: [], views: 0 };
     data.pastes.push(paste);
-    saveData();
-    return paste;
+    return saveData().then(function() { return paste; });
   });
 }
 
@@ -122,8 +119,7 @@ function apiGetPaste(id) {
     var paste = data.pastes.find(function(p) { return p.id === id; });
     if (!paste) return null;
     paste.views = (paste.views || 0) + 1;
-    saveData();
-    return paste;
+    return saveData().then(function() { return paste; });
   });
 }
 
@@ -135,15 +131,14 @@ function apiUpdatePaste(id, updates) {
     if (updates.title !== undefined) paste.title = updates.title;
     if (updates.content !== undefined) paste.content = updates.content;
     if (updates.views !== undefined) paste.views = updates.views;
-    saveData();
-    return paste;
+    return saveData().then(function() { return paste; });
   });
 }
 
 function apiDeletePaste(id) {
   return loadData().then(function(data) {
     data.pastes = data.pastes.filter(function(p) { return p.id !== id; });
-    saveData();
+    return saveData();
   });
 }
 
@@ -154,8 +149,7 @@ function apiAddComment(pasteId, content) {
     if (!paste.comments) paste.comments = [];
     var comment = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), author: localStorage.getItem('cybersec-session'), content: content, time: Date.now(), deleted: false };
     paste.comments.push(comment);
-    saveData();
-    return comment;
+    return saveData().then(function() { return comment; });
   });
 }
 
@@ -165,7 +159,7 @@ function apiDeleteComment(pasteId, commentId) {
     if (!paste) return;
     var comment = (paste.comments || []).find(function(c) { return c.id === commentId; });
     if (comment) comment.deleted = true;
-    saveData();
+    return saveData();
   });
 }
 
@@ -177,8 +171,7 @@ function apiCreateTicket(subject, message, priority) {
   return loadData().then(function(data) {
     var ticket = { id: Date.now(), subject: subject, message: message, author: localStorage.getItem('cybersec-session'), date: new Date().toISOString(), status: 'open', priority: priority || 'low', replies: [] };
     data.tickets.push(ticket);
-    saveData();
-    return ticket;
+    return saveData().then(function() { return ticket; });
   });
 }
 
@@ -187,15 +180,14 @@ function apiUpdateTicket(id, updates) {
     var ticket = data.tickets.find(function(t) { return t.id === id; });
     if (!ticket) throw new Error('Not found');
     if (updates.status) ticket.status = updates.status;
-    saveData();
-    return ticket;
+    return saveData().then(function() { return ticket; });
   });
 }
 
 function apiDeleteTicket(id) {
   return loadData().then(function(data) {
     data.tickets = data.tickets.filter(function(t) { return t.id !== id; });
-    saveData();
+    return saveData();
   });
 }
 
@@ -205,15 +197,13 @@ function apiReplyTicket(id, content) {
     if (!ticket) throw new Error('Not found');
     if (!ticket.replies) ticket.replies = [];
     ticket.replies.push({ author: localStorage.getItem('cybersec-session'), content: content, date: new Date().toISOString() });
-    saveData();
-    return ticket;
+    return saveData().then(function() { return ticket; });
   });
 }
 
 function apiGetVisitor() {
   return loadData().then(function(data) {
     data.visitors = (data.visitors || 0) + 1;
-    saveData();
-    return { count: data.visitors };
+    return saveData().then(function() { return { count: data.visitors }; });
   });
 }
