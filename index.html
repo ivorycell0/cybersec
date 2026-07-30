@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cybersec | Home</title>
+    <link rel="stylesheet" href="style.css">
+    <script>if(!localStorage.getItem('cybersec-token')){location.href='login.html';}</script>
+</head>
+<body>
+    <canvas id="snowfall"></canvas>
+
+    <nav>
+        <div class="logo">CYBERSEC</div>
+        <ul class="nav-links">
+            <li><a href="index.html" class="active">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="services.html">Services</a></li>
+            <li><a href="sandbox.html">Sandbox</a></li>
+            <li><a href="blog.html">Blog</a></li>
+            <li><a href="tickets.html">Tickets</a></li>
+            <li><a href="login.html">Login</a></li>
+        </ul>
+        <div class="hamburger" onclick="toggleNav()">&#9776;</div>
+    </nav>
+
+    <main>
+        <section class="hero">
+            <h1 class="glitch" data-text="CYBERSEC">CYBERSEC</h1>
+            <p class="tagline" id="typewriter" data-text="Enter the digital dimension"></p>
+            <button class="btn-neon" id="explore-btn">Explore</button>
+        </section>
+    </main>
+
+    <div class="explore-overlay" id="explore-overlay">
+        <div class="explore-modal">
+            <div class="explore-header">
+                <span class="explore-title">EXPLORE CYBERSEC</span>
+                <button class="explore-close" id="explore-close">&times;</button>
+            </div>
+            <div class="explore-grid">
+                <a href="index.html" class="explore-item">
+                    <span class="explore-icon">&#127968;</span>
+                    <span class="explore-name">Home</span>
+                    <span class="explore-desc">Return to the start</span>
+                </a>
+                <a href="about.html" class="explore-item">
+                    <span class="explore-icon">&#9432;</span>
+                    <span class="explore-name">About</span>
+                    <span class="explore-desc">Our mission &amp; vision</span>
+                </a>
+                <a href="services.html" class="explore-item">
+                    <span class="explore-icon">&#9881;</span>
+                    <span class="explore-name">Services</span>
+                    <span class="explore-desc">What we offer</span>
+                </a>
+                <a href="sandbox.html" class="explore-item">
+                    <span class="explore-icon">&#9003;</span>
+                    <span class="explore-name">Sandbox</span>
+                    <span class="explore-desc">Write &amp; run code</span>
+                </a>
+                <a href="blog.html" class="explore-item">
+                    <span class="explore-icon">&#9998;</span>
+                    <span class="explore-name">Blog</span>
+                    <span class="explore-desc">News &amp; updates</span>
+                </a>
+                <a href="tickets.html" class="explore-item" id="explore-tickets">
+                    <span class="explore-icon">&#128195;</span>
+                    <span class="explore-name">Tickets</span>
+                    <span class="explore-desc">Support tickets</span>
+                </a>
+                <a href="dashboard.html" class="explore-item">
+                    <span class="explore-icon">&#128200;</span>
+                    <span class="explore-name">Dashboard</span>
+                    <span class="explore-desc">System analytics</span>
+                </a>
+                <a href="chat.html" class="explore-item">
+                    <span class="explore-icon">&#128172;</span>
+                    <span class="explore-name">Chat</span>
+                    <span class="explore-desc">Group conversation</span>
+                </a>
+                <a href="paste.html" class="explore-item">
+                    <span class="explore-icon">&#128196;</span>
+                    <span class="explore-name">Paste</span>
+                    <span class="explore-desc">Code &amp; text snippets</span>
+                </a>
+                <a href="users.html" class="explore-item">
+                    <span class="explore-icon">&#128101;</span>
+                    <span class="explore-name">Users</span>
+                    <span class="explore-desc">All members by rank</span>
+                </a>
+                <a href="login.html" class="explore-item">
+                    <span class="explore-icon">&#128274;</span>
+                    <span class="explore-name">Login</span>
+                    <span class="explore-desc">Sign in or register</span>
+                </a>
+                <a href="contact.html" class="explore-item">
+                    <span class="explore-icon">&#128203;</span>
+                    <span class="explore-name">Submit Ticket</span>
+                    <span class="explore-desc">Report an issue</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script src="api.js"></script>
+    <script>
+        var _tok = localStorage.getItem('cybersec-token');
+        if (_tok) {
+            document.querySelectorAll('.nav-links a[href="login.html"], .explore-item[href="login.html"]').forEach(function(el) {
+                if (el.tagName === 'A') el.remove();
+            });
+            var _session = localStorage.getItem('cybersec-session');
+            apiGetUsers().then(function(users) {
+                var u = users.find(function(x) { return x.username === _session; });
+                var r = u ? u.role : 'regular';
+                if (['owner','co-owner','dev','admin'].indexOf(r) === -1) {
+                    document.querySelectorAll('.nav-links a[href="tickets.html"], #explore-tickets').forEach(function(el) { if (el) el.remove(); });
+                }
+            });
+        }
+    </script>
+</body>
+</html>

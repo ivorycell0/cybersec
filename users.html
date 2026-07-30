@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cybersec | Users</title>
+    <link rel="stylesheet" href="style.css">
+    <script>if(!localStorage.getItem('cybersec-token')){location.href='login.html';}</script>
+</head>
+<body>
+    <canvas id="snowfall"></canvas>
+
+    <nav>
+        <div class="logo">CYBERSEC</div>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="services.html">Services</a></li>
+            <li><a href="sandbox.html">Sandbox</a></li>
+            <li><a href="blog.html">Blog</a></li>
+            <li><a href="tickets.html">Tickets</a></li>
+            <li><a href="login.html">Login</a></li>
+        </ul>
+        <div class="hamburger" onclick="toggleNav()">&#9776;</div>
+    </nav>
+
+    <main>
+        <section class="page-content">
+            <h1 class="glitch" data-text="USERS">USERS</h1>
+            <p class="tagline">All registered members by rank</p>
+
+            <div class="users-container" id="users-container">
+                <div class="users-list" id="users-list"></div>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+    <script src="api.js"></script>
+    <script>
+        var ROLE_ORDER = ['owner', 'co-owner', 'dev', 'admin', 'mod', 'regular'];
+        var ROLE_COLORS = { 'owner': '#ff0040', 'co-owner': '#ff00aa', 'dev': '#8800ff', 'admin': '#00e5ff', 'mod': '#00cc88', 'regular': '#8888aa' };
+        var ROLE_BADGE = { owner:'\u265B OWNER','co-owner':'\u265B CO-OWNER',dev:'DEV',admin:'ADMIN',mod:'MOD',regular:'' };
+        var ROLE_LABEL = { owner:'\u265B Owner','co-owner':'\u265B Co-Owner',dev:'Dev',admin:'Admin',mod:'Mod',regular:'' };
+        var STAFF_ROLES = ['owner','co-owner','dev','admin'];
+
+        var _cachedUsers = [];
+
+        function loadUsers() {
+            return apiGetUsers().then(function(users) {
+                _cachedUsers = users;
+                users.forEach(function(u) { if (!u.role) u.role = 'regular'; });
+                var cs = users.find(function(u) { return u.username.toLowerCase() === 'cs'; });
+                if (cs) cs.role = 'owner';
+                return users;
+            }).catch(function() { return []; });
+        }
+
+        function saveUser(username, data) {
+            return apiUpdateUser(username, data).then(function() { return loadUsers(); });
+        }
+
+        function getTagStyleClass(u) {
+            var style = u.tagStyle || 'glossy';
+            if (style === 'rainbow') return ' tag-rainbow';
+            return ' tag-' + style;
+        }
+
+        function getTagColor(u) {
+            if (u.tagStyle === 'rainbow') return ROLE_COLORS[u.role] || '#8888aa';
+            return u.tagColor || ROLE_COLORS[u.role] || '#8888aa';
+        }
+
+        function getDisplayTag(u) {
+            if (u.customTag && u.customTag.trim()) return u.customTag.trim();
+            return ROLE_LABEL[u.role] || '';
+        }
+
+        function changeUserRole(username, newRole) {
+            if (newRole === 'owner') return;
+            saveUser(username, { role: newRole }).then(function() { renderAll(); });
+        }
+
+        function renderUsers() {
+            var users = _cachedUsers;
+            var container = document.getElementById('users-list');
+            users.sort(function(a, b) { return ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role); });
+
+            if (users.length === 0) {
+                container.innerHTML = '<p class="users-empty">No registered users yet.</p>';
+                return;
+            }
+
+            var sessionUser = localStorage.getItem('cybersec-session');
+            var curUser = users.find(function(u) { return sessionUser && u.username.toLowerCase() === sessionUser.toLowerCase(); });
+            var isStaffPanel = curUser && (curUser.role === 'owner' || curUser.role === 'co-owner');
+            var currentRole = '';
+            var html = '';
+
+            users.forEach(function(u, i) {
+                var displayTag = getDisplayTag(u);
+                var isYou = sessionUser && sessionUser.toLowerCase() === u.username.toLowerCase();
+                var num = (i + 1).toString().padStart(2, '0');
+                var tagColor = getTagColor(u);
+                var styleClass = getTagStyleClass(u);
+
+                if (u.role !== currentRole) {
+                    currentRole = u.role;
+                    html += '<div class="users-role-divider">' + currentRole.toUpperCase() + '</div>';
+                }
+
+                html += '<div class="users-row">' +
+                    '<span class="users-num">' + num + '</span>' +
+                    '<span class="users-name' + (isYou ? ' users-you' : '') + '">' + u.username + (isYou ? ' <span class="users-you-tag">(you)</span>' : '') + '</span>' +
+                    (displayTag ? '<span class="paste-role-tag' + styleClass + '" style="color:' + tagColor + ';border-color:' + tagColor + ';font-size:0.65rem;padding:2px 10px;">' + displayTag + '</span>' : '') +
+                    (isStaffPanel && u.role !== 'owner' ? '<select class="admin-role-select" onchange="changeUserRole(\'' + u.username + '\',this.value)" style="margin-left:auto;background:var(--input-bg);border:1px solid var(--glass-border);color:var(--text);padding:0.2rem 0.4rem;font-size:0.6rem;border-radius:6px;outline:none;cursor:pointer;">' + ROLE_ORDER.map(function(r) { return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + (ROLE_LABEL[r] || r) + '</option>'; }).join('') + '</select>' : '') +
+                '</div>';
+            });
+
+            container.innerHTML = html;
+        }
+
+        function renderTagSettings() {
+            var sessionUser = localStorage.getItem('cybersec-session');
+            if (!sessionUser) return;
+            var current = _cachedUsers.find(function(u) { return u.username.toLowerCase() === sessionUser.toLowerCase(); });
+            if (!current) return;
+            if (current.role === 'regular') return;
+
+            var container = document.getElementById('users-container');
+            var tagColor = getTagColor(current);
+            var currentStyle = current.tagStyle || 'glossy';
+            var currentCustomTag = current.customTag || '';
+
+            var styles = [
+                { id: 'glossy', label: 'Glossy' },
+                { id: 'neon', label: 'Neon' },
+                { id: 'glitter', label: 'Glitter' },
+                { id: 'sparkle', label: 'Sparkle' },
+                { id: 'rainbow', label: 'Rainbow' },
+            ];
+
+            var styleButtons = styles.map(function(s) {
+                return '<button class="tag-style-btn' + (s.id === currentStyle ? ' tag-style-active' : '') + '" data-style="' + s.id + '">' + s.label + '</button>';
+            }).join('');
+
+            var div = document.createElement('div');
+            div.className = 'tag-settings';
+            div.innerHTML =
+                '<div class="tag-settings-title">&#127912; TAG STYLE</div>' +
+                '<div class="tag-settings-styles">' + styleButtons + '</div>' +
+                '<div class="tag-settings-row" id="tag-color-row"' + (currentStyle === 'rainbow' ? ' style="display:none"' : '') + '>' +
+                    '<label class="anon-label"><input type="color" id="tag-color-picker" value="' + tagColor + '"> Color</label>' +
+                '</div>' +
+                '<div class="tag-settings-row">' +
+                    '<label class="anon-label" style="gap:0.4rem;flex-wrap:wrap;"><span style="font-size:0.7rem;">Custom Tag Text:</span><input type="text" id="tag-custom-text" value="' + currentCustomTag.replace(/"/g,'&quot;') + '" placeholder="e.g. Elite Hacker" style="flex:1;min-width:120px;background:var(--input-bg);border:1px solid var(--glass-border);padding:0.4rem 0.6rem;color:var(--text);font-size:0.8rem;outline:none;border-radius:8px;"></label>' +
+                '</div>' +
+                '<div class="tag-settings-preview">Preview: <span class="paste-role-tag tag-' + currentStyle + '" id="tag-preview" style="color:' + tagColor + ';border-color:' + tagColor + ';">' + (getDisplayTag(current) || current.role.toUpperCase()) + '</span></div>';
+
+            container.appendChild(div);
+
+            document.querySelectorAll('.tag-style-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var style = this.getAttribute('data-style');
+                    saveUser(sessionUser, { tagStyle: style }).then(function() {
+                        document.querySelectorAll('.tag-style-btn').forEach(function(b) { b.classList.remove('tag-style-active'); });
+                        this.classList.add('tag-style-active');
+                        var preview = document.getElementById('tag-preview');
+                        preview.className = 'paste-role-tag tag-' + style;
+                        var colorRow = document.getElementById('tag-color-row');
+                        var u = _cachedUsers.find(function(x) { return x.username.toLowerCase() === sessionUser.toLowerCase(); });
+                        if (style === 'rainbow') {
+                            colorRow.style.display = 'none';
+                            preview.style.color = ROLE_COLORS[current.role] || '#8888aa';
+                            preview.style.borderColor = ROLE_COLORS[current.role] || '#8888aa';
+                        } else {
+                            colorRow.style.display = '';
+                            var color = getTagColor(u);
+                            preview.style.color = color;
+                            preview.style.borderColor = color;
+                        }
+                        renderUsers();
+                    }.bind(this));
+                });
+            });
+
+            document.getElementById('tag-color-picker').addEventListener('input', function() {
+                var val = this.value;
+                saveUser(sessionUser, { tagColor: val }).then(function() {
+                    document.getElementById('tag-preview').style.color = val;
+                    document.getElementById('tag-preview').style.borderColor = val;
+                    renderUsers();
+                });
+            });
+
+            document.getElementById('tag-custom-text').addEventListener('input', function() {
+                var val = this.value;
+                saveUser(sessionUser, { customTag: val }).then(function() {
+                    var preview = document.getElementById('tag-preview');
+                    preview.textContent = val.trim() || (ROLE_LABEL[current.role] || current.role.toUpperCase());
+                    renderUsers();
+                });
+            });
+        }
+
+        function renderAll() {
+            renderUsers();
+            var existing = document.querySelector('.tag-settings');
+            if (existing) existing.remove();
+            renderTagSettings();
+        }
+
+        loadUsers().then(function() { renderAll(); });
+    </script>
+    <script>
+        var _tok = localStorage.getItem('cybersec-token');
+        if (_tok) {
+            document.querySelectorAll('.nav-links a[href="login.html"]').forEach(function(el) { el.remove(); });
+            apiGetUsers().then(function(users) {
+                var u = users.find(function(x) { return x.username === localStorage.getItem('cybersec-session'); });
+                var r = u ? u.role : 'regular';
+                if (['owner','co-owner','dev','admin'].indexOf(r) === -1) {
+                    document.querySelectorAll('.nav-links a[href="tickets.html"]').forEach(function(el) { el.remove(); });
+                }
+            });
+        }
+    </script>
+</body>
+</html>

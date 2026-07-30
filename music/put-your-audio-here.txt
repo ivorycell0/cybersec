@@ -1,0 +1,3 @@
+Drop your audio files here (mp3, wav, ogg, etc.)
+The player will automatically use "bg.mp3" if present.
+Otherwise, use the upload button in the player.
