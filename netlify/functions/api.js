@@ -63,6 +63,11 @@ exports.handler = async function(event) {
       var result = await ghRequest('GET');
       if (result.status === 404) {
         var initial = { users: [], chat: [], pastes: [], tickets: [], visitors: 0 };
+        // Create the file so subsequent writes have a sha
+        var createResult = await ghRequest('PUT', null, JSON.stringify(initial));
+        if (createResult.status === 201) {
+          return { statusCode: 200, headers: headers, body: JSON.stringify({ data: initial, sha: createResult.json.content.sha }) };
+        }
         return { statusCode: 200, headers: headers, body: JSON.stringify(initial) };
       }
       if (result.status !== 200) {
@@ -89,11 +94,11 @@ exports.handler = async function(event) {
       if (writeResult.status === 201 || writeResult.status === 200) {
         return { statusCode: 200, headers: headers, body: JSON.stringify({ ok: true }) };
       }
-      return { statusCode: 500, headers: headers, body: JSON.stringify({ error: 'Write failed', detail: writeResult }) };
+      return { statusCode: 500, headers: headers, body: JSON.stringify({ error: 'Write failed', status: writeResult.status, gh: writeResult.json || writeResult.text }) };
     }
 
     return { statusCode: 405, headers: headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   } catch (e) {
-    return { statusCode: 500, headers: headers, body: JSON.stringify({ error: e.message }) };
+    return { statusCode: 500, headers: headers, body: JSON.stringify({ error: e.message, stack: e.stack }) };
   }
 };
