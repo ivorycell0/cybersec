@@ -93,8 +93,9 @@
 
         function updateUI() {
             const session = localStorage.getItem('cybersec-session');
-            tokenField.style.display = localStorage.getItem('gh-token') ? 'none' : 'block';
-            if (session) {
+            var hasToken = !!localStorage.getItem('gh-token');
+            tokenField.style.display = hasToken ? 'none' : 'block';
+            if (session && hasToken) {
                 statusEl.innerHTML = '';
                 const check = document.createElement('span');
                 check.textContent = '\u2713 logged in as ';
@@ -162,6 +163,12 @@
             if (ghToken) {
                 localStorage.setItem('gh-token', ghToken);
                 GH_TOKEN = ghToken;
+            }
+
+            // If already logged in and just needed to enter token, done
+            if (localStorage.getItem('cybersec-session')) {
+                updateUI();
+                return;
             }
 
             if (!user || !pass) {
