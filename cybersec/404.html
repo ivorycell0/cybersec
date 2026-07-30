@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cybersec | Lost</title>
+    <link rel="stylesheet" href="style.css">
+    <script>if(!localStorage.getItem('cybersec-token')){location.href='login.html';}</script>
+</head>
+<body class="page-404">
+    <canvas id="snowfall"></canvas>
+
+    <nav>
+        <div class="logo">CYBERSEC</div>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="services.html">Services</a></li>
+            <li><a href="sandbox.html">Sandbox</a></li>
+            <li><a href="blog.html">Blog</a></li>
+            <li><a href="tickets.html">Tickets</a></li>
+            <li><a href="login.html">Login</a></li>
+        </ul>
+        <div class="hamburger" onclick="toggleNav()">&#9776;</div>
+    </nav>
+
+    <main>
+        <section class="hero">
+            <h1 class="glitch" data-text="404">404</h1>
+            <p class="tagline">LOST IN THE MATRIX</p>
+            <p style="color:#888;margin-bottom:2rem;font-size:0.95rem;">The page you're looking for doesn't exist — or never did.</p>
+            <a href="index.html" class="btn-neon">&#8592; Return</a>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+    <script src="api.js"></script>
+    <script>
+        var _tok = localStorage.getItem('cybersec-token');
+        if (_tok) {
+            document.querySelectorAll('.nav-links a[href="login.html"]').forEach(function(el) { el.remove(); });
+            var _session = localStorage.getItem('cybersec-session');
+            apiGetUsers().then(function(users) {
+                var u = users.find(function(x) { return x.username === _session; });
+                var r = u ? u.role : 'regular';
+                if (['owner','co-owner','dev','admin'].indexOf(r) === -1) {
+                    document.querySelectorAll('.nav-links a[href="tickets.html"]').forEach(function(el) { el.remove(); });
+                }
+            });
+        }
+    </script>
+</body>
+</html>

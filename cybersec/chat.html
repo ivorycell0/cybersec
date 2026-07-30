@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cybersec | Chat</title>
+    <link rel="stylesheet" href="style.css">
+    <script>if(!localStorage.getItem('cybersec-token')){location.href='login.html';}</script>
+</head>
+<body>
+    <canvas id="snowfall"></canvas>
+
+    <nav>
+        <div class="logo">CYBERSEC</div>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="services.html">Services</a></li>
+            <li><a href="sandbox.html">Sandbox</a></li>
+            <li><a href="blog.html">Blog</a></li>
+            <li><a href="tickets.html">Tickets</a></li>
+            <li><a href="login.html">Login</a></li>
+        </ul>
+        <div class="hamburger" onclick="toggleNav()">&#9776;</div>
+    </nav>
+
+    <main>
+        <section class="page-content">
+            <h1 class="glitch" data-text="CHAT">CHAT</h1>
+            <p class="tagline">Group conversation</p>
+
+            <div class="chat-container">
+                <div class="chat-form-box">
+                    <div class="chat-login-msg" id="chat-login-msg">You must be logged in to chat.</div>
+                    <form class="chat-form" id="chat-form">
+                        <textarea id="chat-content" placeholder="Type a message..." rows="3"></textarea>
+                        <button type="submit" class="btn-neon" id="chat-post-btn">Send</button>
+                    </form>
+                </div>
+
+                <div class="chat-feed">
+                    <div class="chat-feed-header">
+                        <span id="chat-header-label">RECENT</span>
+                        <button id="chat-history-btn" class="chat-history-btn" style="display:none">Show All History</button>
+                    </div>
+                    <div id="chat-messages"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+    <script src="api.js"></script>
+    <script>
+        var ROLE_COLORS = { owner:'#ff0040','co-owner':'#ff00aa',dev:'#8800ff',admin:'#00e5ff',mod:'#00cc88',regular:'#8888aa' };
+        var ROLE_LABEL = { owner:'\u265B Owner','co-owner':'\u265B Co-Owner',dev:'Dev',admin:'Admin',mod:'Mod',regular:'' };
+
+        var _cachedUsers = [];
+
+        function loadUsers() {
+            return apiGetUsers().then(function(users) {
+                _cachedUsers = users;
+                users.forEach(function(u) { if (!u.role) u.role = 'regular'; });
+                var cs = users.find(function(u) { return u.username.toLowerCase() === 'cs'; });
+                if (cs) cs.role = 'owner';
+                return users;
+            }).catch(function() { return []; });
+        }
+
+        function getUserData(username) {
+            return _cachedUsers.find(function(x) { return x.username.toLowerCase() === username.toLowerCase(); });
+        }
+
+        function getUserRole(username) {
+            var u = getUserData(username);
+            return u ? u.role : 'regular';
+        }
+
+        function getTagColor(username, fallback) {
+            var u = getUserData(username);
+            if (!u) return fallback || '#8888aa';
+            if (u.tagStyle === 'rainbow') return ROLE_COLORS[u.role] || fallback || '#8888aa';
+            return u.tagColor || ROLE_COLORS[u.role] || fallback || '#8888aa';
+        }
+
+        function getTagStyle(username) {
+            var u = getUserData(username);
+            return (u && u.tagStyle) || 'glossy';
+        }
+
+        function getDisplayTag(username) {
+            var u = getUserData(username);
+            if (!u) return '';
+            if (u.customTag && u.customTag.trim()) return u.customTag.trim();
+            return ROLE_LABEL[u.role] || '';
+        }
+
+        var session = localStorage.getItem('cybersec-session');
+        var loginMsg = document.getElementById('chat-login-msg');
+        var chatForm = document.getElementById('chat-form');
+        var chatContent = document.getElementById('chat-content');
+        var chatMessages = document.getElementById('chat-messages');
+        var showAllHistory = false;
+
+        if (session) { loginMsg.style.display = 'none'; chatForm.style.display = ''; }
+        else { loginMsg.style.display = ''; chatForm.style.display = 'none'; }
+
+        function timeAgo(ts) {
+            var d = Math.floor((Date.now() - ts) / 1000);
+            if (d < 60) return 'just now';
+            if (d < 3600) return Math.floor(d / 60) + 'm ago';
+            if (d < 86400) return Math.floor(d / 3600) + 'h ago';
+            return Math.floor(d / 86400) + 'd ago';
+        }
+
+        function renderPosts(posts, isStaff) {
+            var weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            var filtered = showAllHistory ? posts : posts.filter(function(p) { return p.time > weekAgo; });
+            document.getElementById('chat-header-label').textContent = showAllHistory ? 'ALL TIME' : 'RECENT';
+            if (filtered.length === 0) {
+                chatMessages.innerHTML = '<div class="chat-empty">' + (showAllHistory ? 'No messages in history.' : 'No messages this week.') + '</div>';
+                return;
+            }
+            chatMessages.innerHTML = filtered.map(function(p) {
+                var role = getUserRole(p.author);
+                var color = getTagColor(p.author, ROLE_COLORS[role]);
+                var label = getDisplayTag(p.author);
+                var tagStyle = ' tag-' + getTagStyle(p.author);
+                var tag = (label && role !== 'regular') ? '<span class="paste-role-tag' + tagStyle + '" style="color:' + color + ';border-color:' + color + '">[' + label + ']</span> ' : '';
+                var isYou = session && session.toLowerCase() === p.author.toLowerCase();
+                return '<div class="chat-msg' + (isYou ? ' chat-msg-you' : '') + '">' +
+                    '<div class="chat-msg-head">' +
+                        tag +
+                        '<span class="chat-msg-author" style="color:' + color + '">' + p.author + '</span>' +
+                        '<span class="chat-msg-time">' + timeAgo(p.time) + '</span>' +
+                        (isYou || session === 'cs' ? '<button class="chat-msg-del" data-id="' + p.id + '" title="Delete">&#10005;</button>' : '') +
+                    '</div>' +
+                    '<div class="chat-msg-content">' + p.content.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>') + '</div>' +
+                '</div>';
+            }).join('');
+            chatMessages.querySelectorAll('.chat-msg-del').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var id = btn.getAttribute('data-id');
+                    apiDeleteChat(id).then(function() { refreshChat(); });
+                });
+            });
+        }
+
+        function refreshChat() {
+            var sessionRole = session ? getUserRole(session) : 'regular';
+            var isStaff = sessionRole === 'owner' || sessionRole === 'co-owner';
+            var historyBtn = document.getElementById('chat-history-btn');
+            if (isStaff) { historyBtn.style.display = ''; }
+            apiGetChat().then(function(posts) { renderPosts(posts, isStaff); });
+        }
+
+        var historyBtn = document.getElementById('chat-history-btn');
+        historyBtn.addEventListener('click', function() {
+            showAllHistory = !showAllHistory;
+            historyBtn.textContent = showAllHistory ? 'Show Recent' : 'Show All History';
+            refreshChat();
+        });
+
+        chatForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var content = chatContent.value.trim();
+            if (!content) return;
+            apiPostChat(content).then(function() {
+                chatContent.value = '';
+                refreshChat();
+            });
+        });
+
+        loadUsers().then(function() { refreshChat(); });
+        setInterval(refreshChat, 5000);
+    </script>
+    <script>
+        var _tok = localStorage.getItem('cybersec-token');
+        if (_tok) {
+            document.querySelectorAll('.nav-links a[href="login.html"]').forEach(function(el) { el.remove(); });
+            apiGetUsers().then(function(users) {
+                var u = users.find(function(x) { return x.username === localStorage.getItem('cybersec-session'); });
+                var r = u ? u.role : 'regular';
+                if (['owner','co-owner','dev','admin'].indexOf(r) === -1) {
+                    document.querySelectorAll('.nav-links a[href="tickets.html"]').forEach(function(el) { el.remove(); });
+                }
+            });
+        }
+    </script>
+</body>
+</html>

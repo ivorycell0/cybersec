@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cybersec | Submit Ticket</title>
+    <link rel="stylesheet" href="style.css">
+    <script>if(!localStorage.getItem('cybersec-token')){location.href='login.html';}</script>
+</head>
+<body>
+    <canvas id="snowfall"></canvas>
+
+    <nav>
+        <div class="logo">CYBERSEC</div>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="services.html">Services</a></li>
+            <li><a href="sandbox.html">Sandbox</a></li>
+            <li><a href="blog.html">Blog</a></li>
+            <li><a href="tickets.html">Tickets</a></li>
+            <li><a href="login.html">Login</a></li>
+        </ul>
+        <div class="hamburger" onclick="toggleNav()">&#9776;</div>
+    </nav>
+
+    <main>
+        <section class="page-content">
+            <h1>SUBMIT TICKET</h1>
+            <form class="contact-form" id="ticket-form">
+                <input type="text" id="ticket-subject" placeholder="Subject" required>
+                <textarea id="ticket-message" placeholder="Describe your issue..." rows="6" required></textarea>
+                <div style="display:flex;gap:1rem;align-items:center;justify-content:center;">
+                    <span style="font-size:0.75rem;letter-spacing:1px;color:var(--text-dim);">Priority:</span>
+                    <label style="font-size:0.8rem;color:var(--text-muted);cursor:pointer;"><input type="radio" name="priority" value="low" checked> Low</label>
+                    <label style="font-size:0.8rem;color:var(--text-muted);cursor:pointer;"><input type="radio" name="priority" value="medium"> Medium</label>
+                    <label style="font-size:0.8rem;color:var(--text-muted);cursor:pointer;"><input type="radio" name="priority" value="high"> High</label>
+                </div>
+                <button type="submit" class="btn-neon">Submit</button>
+            </form>
+            <p id="ticket-feedback" style="margin-top:1rem;font-size:0.85rem;display:none;"></p>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+    <script src="api.js"></script>
+    <script>
+        var _tok = localStorage.getItem('cybersec-token');
+        if (_tok) {
+            document.querySelectorAll('.nav-links a[href="login.html"]').forEach(function(el) { el.remove(); });
+            apiGetUsers().then(function(users) {
+                var u = users.find(function(x) { return x.username === localStorage.getItem('cybersec-session'); });
+                var r = u ? u.role : 'regular';
+                if (['owner','co-owner','dev','admin'].indexOf(r) === -1) {
+                    document.querySelectorAll('.nav-links a[href="tickets.html"]').forEach(function(el) { el.remove(); });
+                }
+            });
+        }
+
+        document.getElementById('ticket-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            var subject = document.getElementById('ticket-subject').value.trim();
+            var message = document.getElementById('ticket-message').value.trim();
+            var priority = document.querySelector('input[name="priority"]:checked').value;
+            if (!subject || !message) return;
+
+            apiCreateTicket(subject, message, priority).then(function() {
+                document.getElementById('ticket-subject').value = '';
+                document.getElementById('ticket-message').value = '';
+                var fb = document.getElementById('ticket-feedback');
+                fb.textContent = 'Ticket submitted successfully!';
+                fb.style.color = 'var(--cyan)';
+                fb.style.display = '';
+                setTimeout(function() { fb.style.display = 'none'; }, 4000);
+            }).catch(function() {
+                var fb = document.getElementById('ticket-feedback');
+                fb.textContent = 'Failed to submit ticket.';
+                fb.style.color = 'var(--red)';
+                fb.style.display = '';
+            });
+        });
+    </script>
+</body>
+</html>

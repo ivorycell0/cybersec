@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cybersec | Login</title>
+    <link rel="stylesheet" href="style.css">
+    <script>if(localStorage.getItem('cybersec-token')){location.href='index.html';}</script>
+</head>
+<body>
+    <canvas id="snowfall"></canvas>
+
+    <nav>
+        <div class="logo">CYBERSEC</div>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="services.html">Services</a></li>
+            <li><a href="sandbox.html">Sandbox</a></li>
+            <li><a href="blog.html">Blog</a></li>
+            <li><a href="login.html" class="active">Login</a></li>
+        </ul>
+        <div class="hamburger" onclick="toggleNav()">&#9776;</div>
+    </nav>
+
+    <main>
+        <section class="page-content">
+            <h1 class="glitch" data-text="ACCESS">ACCESS</h1>
+            <p class="tagline">Authorized personnel only</p>
+
+            <div class="login-box">
+                <div class="login-tabs">
+                    <button class="login-tab active" data-mode="login" id="tab-login">LOGIN</button>
+                    <button class="login-tab" data-mode="signup" id="tab-signup">SIGN UP</button>
+                </div>
+
+                <div class="login-terminal">
+                    <span class="login-term-text" id="login-term">cybersec@gate:~$ _</span>
+                </div>
+
+                <form class="login-form" id="login-form">
+                    <div class="login-field">
+                        <label for="login-user">USERNAME</label>
+                        <input type="text" id="login-user" placeholder="Enter username" autocomplete="off" autocapitalize="off" spellcheck="false">
+                    </div>
+                    <div class="login-field">
+                        <label for="login-pass">PASSWORD</label>
+                        <input type="password" id="login-pass" placeholder="Enter password" autocomplete="new-password">
+                    </div>
+                    <div class="login-field" id="pass-confirm-field">
+                        <label for="login-pass2">CONFIRM PASSWORD</label>
+                        <input type="password" id="login-pass2" placeholder="Confirm password" autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="btn-neon" id="login-btn">Authenticate</button>
+                    <p class="login-error" id="login-error"></p>
+                </form>
+
+                <div class="login-status" id="login-status"></div>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+    <script src="api.js"></script>
+    <script>
+        const termEl = document.getElementById('login-term');
+        const msgs = [
+            'cybersec@gate:~$ _',
+            'cybersec@gate:~$ initiating handshake...',
+            'cybersec@gate:~$ connection secured',
+            'cybersec@gate:~$ awaiting credentials_'
+        ];
+        let mi = 0;
+        setInterval(() => {
+            mi = (mi + 1) % msgs.length;
+            termEl.textContent = msgs[mi];
+        }, 2500);
+
+        const tabLogin = document.getElementById('tab-login');
+        const tabSignup = document.getElementById('tab-signup');
+        const pass2Field = document.getElementById('pass-confirm-field');
+        const loginBtn = document.getElementById('login-btn');
+        const errEl = document.getElementById('login-error');
+        const statusEl = document.getElementById('login-status');
+        let mode = 'login';
+
+        function updateUI() {
+            const token = localStorage.getItem('cybersec-token');
+            const session = localStorage.getItem('cybersec-session');
+            if (token && session) {
+                statusEl.innerHTML = '';
+                const check = document.createElement('span');
+                check.textContent = '\u2713 logged in as ';
+                const strong = document.createElement('strong');
+                strong.textContent = session;
+                const logoutBtn = document.createElement('button');
+                logoutBtn.className = 'btn-neon';
+                logoutBtn.id = 'logout-btn';
+                logoutBtn.textContent = 'Logout';
+                logoutBtn.style.cssText = 'padding:0.3rem 1rem;font-size:0.75rem;margin-left:8px;';
+                logoutBtn.addEventListener('click', function() { apiLogout().then(function() { location.reload(); }); });
+                statusEl.appendChild(check);
+                statusEl.appendChild(strong);
+                statusEl.appendChild(logoutBtn);
+                loginBtn.style.display = 'none';
+                document.getElementById('login-form').style.display = 'none';
+                document.querySelector('.login-tabs').style.display = 'none';
+            } else {
+                statusEl.innerHTML = '';
+                loginBtn.style.display = '';
+                document.getElementById('login-form').style.display = '';
+                document.querySelector('.login-tabs').style.display = '';
+            }
+        }
+
+        function resetLoginForm() {
+            document.getElementById('login-user').value = '';
+            document.getElementById('login-pass').value = '';
+            document.getElementById('login-pass2').value = '';
+            errEl.textContent = '';
+            errEl.style.color = '#ff0000';
+        }
+
+        updateUI();
+
+        tabLogin.addEventListener('click', () => {
+            mode = 'login';
+            tabLogin.classList.add('active');
+            tabSignup.classList.remove('active');
+            pass2Field.style.display = 'none';
+            loginBtn.textContent = 'Authenticate';
+            resetLoginForm();
+        });
+
+        tabSignup.addEventListener('click', () => {
+            mode = 'signup';
+            tabSignup.classList.add('active');
+            tabLogin.classList.remove('active');
+            pass2Field.style.display = 'block';
+            loginBtn.textContent = 'Register';
+            resetLoginForm();
+        });
+
+        function handleAuth() {
+            const user = document.getElementById('login-user').value.trim();
+            const pass = document.getElementById('login-pass').value.trim();
+            const pass2 = document.getElementById('login-pass2').value.trim();
+            errEl.style.color = '#ff0000';
+
+            if (!user || !pass) {
+                errEl.textContent = '[!] both fields required';
+                return;
+            }
+
+            if (mode === 'signup') {
+                if (pass !== pass2) {
+                    errEl.textContent = '[!] passwords do not match';
+                    return;
+                }
+                if (user.length < 2) {
+                    errEl.textContent = '[!] username must be at least 2 characters';
+                    return;
+                }
+                if (pass.length < 8) {
+                    errEl.textContent = '[!] password must be at least 8 characters';
+                    return;
+                }
+                if (!/[^a-zA-Z0-9]/.test(pass)) {
+                    errEl.textContent = '[!] password must include at least one special character';
+                    return;
+                }
+                apiSignup(user, pass).then(function() {
+                    return apiLogin(user, pass);
+                }).then(function() {
+                    updateUI();
+                }).catch(function(e) {
+                    errEl.textContent = '[!] ' + (e.message || 'registration failed');
+                });
+                return;
+            }
+
+            apiLogin(user, pass).then(function() {
+                updateUI();
+            }).catch(function(e) {
+                errEl.textContent = '[!] invalid username or password';
+            });
+        }
+
+        loginBtn.addEventListener('click', handleAuth);
+
+        document.getElementById('login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            handleAuth();
+        });
+    </script>
+</body>
+</html>

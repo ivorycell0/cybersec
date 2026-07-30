@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cybersec | Tickets</title>
+    <link rel="stylesheet" href="style.css">
+    <script>if(!localStorage.getItem('cybersec-token')){location.href='login.html';}</script>
+</head>
+<body>
+    <canvas id="snowfall"></canvas>
+
+    <nav>
+        <div class="logo">CYBERSEC</div>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="services.html">Services</a></li>
+            <li><a href="sandbox.html">Sandbox</a></li>
+            <li><a href="blog.html">Blog</a></li>
+            <li><a href="tickets.html" class="active">Tickets</a></li>
+            <li><a href="login.html">Login</a></li>
+        </ul>
+        <div class="hamburger" onclick="toggleNav()">&#9776;</div>
+    </nav>
+
+    <main>
+        <section class="page-content">
+            <h1>TICKETS</h1>
+
+            <div id="tickets-list" style="max-width:850px;width:100%;text-align:left;">
+                <p style="color:var(--text-muted);font-style:italic;">Loading...</p>
+            </div>
+
+            <div id="ticket-detail" style="display:none;max-width:850px;width:100%;text-align:left;"></div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+    <script src="api.js"></script>
+    <script>
+        var STAFF_ROLES = ['owner', 'co-owner', 'dev', 'admin'];
+        var PRIORITY_COLORS = { low: '#55ff55', medium: '#ffaa00', high: '#ff0040' };
+        var currentFilter = 'all';
+        var _cachedUsers = [];
+        var _cachedTickets = [];
+        var _currentUserRole = 'regular';
+
+        function loadUsers() {
+            return apiGetUsers().then(function(users) {
+                _cachedUsers = users;
+                users.forEach(function(u) { if (!u.role) u.role = 'regular'; });
+                var cs = users.find(function(u) { return u.username.toLowerCase() === 'cs'; });
+                if (cs) cs.role = 'owner';
+                var session = localStorage.getItem('cybersec-session');
+                var u = users.find(function(x) { return x.username === session; });
+                _currentUserRole = u ? u.role : 'regular';
+                return users;
+            }).catch(function() { return []; });
+        }
+
+        function loadTickets() {
+            return apiGetTickets().then(function(t) { _cachedTickets = t; return t; }).catch(function() { return []; });
+        }
+
+        function getUser(username) {
+            return _cachedUsers.find(function(u) { return u.username === username; });
+        }
+
+        function currentUser() {
+            var session = localStorage.getItem('cybersec-session');
+            if (!session) return null;
+            return getUser(session);
+        }
+
+        function isStaff() {
+            return STAFF_ROLES.indexOf(_currentUserRole) !== -1;
+        }
+
+        function formatDate(iso) {
+            var d = new Date(iso);
+            return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+        }
+
+        function renderTickets(filter) {
+            if (!isStaff()) {
+                document.getElementById('tickets-list').innerHTML = '<p style="color:var(--text-dim);font-style:italic;padding:3rem;">Access denied. Staff only.</p>';
+                return;
+            }
+            filter = filter || currentFilter;
+            currentFilter = filter;
+            var tickets = _cachedTickets;
+
+            var total = tickets.length;
+            var openCount = tickets.filter(function(t) { return t.status === 'open'; }).length;
+            var closedCount = tickets.filter(function(t) { return t.status === 'closed'; }).length;
+
+            if (filter !== 'all') {
+                tickets = tickets.filter(function(t) { return t.status === filter; });
+            }
+
+            var html = '';
+
+            html += '<div style="display:flex;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap;justify-content:center;">';
+            html += '<div class="dash-card" style="flex:1;min-width:100px;text-align:center;padding:0.8rem;"><div class="dash-stat" style="font-size:1.1rem;margin-bottom:0;">' + total + '</div><div class="dash-header" style="margin-bottom:0;">TOTAL</div></div>';
+            html += '<div class="dash-card" style="flex:1;min-width:100px;text-align:center;padding:0.8rem;border-color:var(--red);"><div class="dash-stat" style="font-size:1.1rem;margin-bottom:0;color:var(--red);">' + openCount + '</div><div class="dash-header" style="margin-bottom:0;">OPEN</div></div>';
+            html += '<div class="dash-card" style="flex:1;min-width:100px;text-align:center;padding:0.8rem;border-color:var(--text-dim);"><div class="dash-stat" style="font-size:1.1rem;margin-bottom:0;color:var(--text-dim);">' + closedCount + '</div><div class="dash-header" style="margin-bottom:0;">CLOSED</div></div>';
+            html += '</div>';
+
+            html += '<div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;justify-content:center;">';
+            html += '<button class="tag-style-btn' + (filter === 'all' ? ' tag-style-active' : '') + '" onclick="renderTickets(\'all\')">All</button>';
+            html += '<button class="tag-style-btn' + (filter === 'open' ? ' tag-style-active' : '') + '" onclick="renderTickets(\'open\')">Open</button>';
+            html += '<button class="tag-style-btn' + (filter === 'closed' ? ' tag-style-active' : '') + '" onclick="renderTickets(\'closed\')">Closed</button>';
+            html += '</div>';
+
+            if (tickets.length === 0) {
+                html += '<p style="color:var(--text-muted);font-style:italic;text-align:center;padding:2rem;">No ' + (filter === 'all' ? '' : filter + ' ') + 'tickets yet.</p>';
+                document.getElementById('tickets-list').innerHTML = html;
+                return;
+            }
+
+            tickets.forEach(function(t) {
+                var pColor = PRIORITY_COLORS[t.priority] || '#8888aa';
+                var statusIcon = t.status === 'open' ? '&#9679;' : '&#9675;';
+                var statusColor = t.status === 'open' ? 'var(--red)' : 'var(--text-dim)';
+                var replyCount = (t.replies || []).length;
+
+                html += '<div class="paste-view-card" style="cursor:pointer;margin-bottom:0.6rem;padding:1rem 1.2rem;transition:0.2s;border-color:var(--glass-border);" onclick="viewTicket(' + t.id + ')" onmouseover="this.style.borderColor=\'var(--red)\'" onmouseout="this.style.borderColor=\'var(--glass-border)\'">';
+                html += '<div style="display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap;">';
+                html += '<span style="font-size:1rem;font-weight:600;flex:1;min-width:150px;color:var(--text);">' + t.subject + '</span>';
+                html += '<span style="font-size:0.55rem;letter-spacing:1px;padding:2px 8px;border:1px solid ' + pColor + ';color:' + pColor + ';border-radius:8px;text-transform:uppercase;font-weight:600;">' + (t.priority || 'low') + '</span>';
+                html += '<span style="color:' + statusColor + ';font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;">' + statusIcon + ' ' + t.status + '</span>';
+                html += '<span style="color:var(--text-dim);font-size:0.7rem;">by ' + t.author + '</span>';
+                html += '<span style="color:var(--text-dim);font-size:0.6rem;">' + formatDate(t.date) + '</span>';
+                if (replyCount > 0) html += '<span style="font-size:0.6rem;color:var(--cyan);letter-spacing:1px;">&#128172; ' + replyCount + '</span>';
+                html += '</div></div>';
+            });
+
+            document.getElementById('tickets-list').innerHTML = html;
+        }
+
+        function viewTicket(id) {
+            var t = _cachedTickets.find(function(x) { return x.id === id; });
+            if (!t) return;
+            var pColor = PRIORITY_COLORS[t.priority] || '#8888aa';
+            var statusIcon = t.status === 'open' ? '&#9679;' : '&#9675;';
+            var statusColor = t.status === 'open' ? 'var(--red)' : 'var(--text-dim)';
+            var replies = t.replies || [];
+
+            var html = '<div class="paste-view-card" style="animation:modalIn 0.25s ease;">';
+            html += '<div class="paste-view-head">';
+            html += '<span class="paste-view-title">' + t.subject + '</span>';
+            html += '<div class="paste-view-meta" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;">';
+            html += '<span style="font-size:0.55rem;letter-spacing:1px;padding:2px 8px;border:1px solid ' + pColor + ';color:' + pColor + ';border-radius:8px;text-transform:uppercase;font-weight:600;">' + (t.priority || 'low') + '</span>';
+            html += '<span style="color:' + statusColor + ';font-size:0.65rem;font-weight:600;text-transform:uppercase;">' + statusIcon + ' ' + t.status + '</span>';
+            html += '<span>by ' + t.author + '</span>';
+            html += '<span style="color:var(--text-dim);">' + formatDate(t.date) + '</span>';
+            html += '</div></div>';
+
+            html += '<div class="paste-view-body">';
+            html += '<pre style="font-family:Inter,sans-serif;white-space:pre-wrap;line-height:1.6;border-radius:10px;background:rgba(0,0,0,0.2);padding:1rem;border:1px solid var(--glass-border);margin-bottom:1.5rem;">' + t.message + '</pre>';
+            html += '</div>';
+
+            if (replies.length > 0) {
+                html += '<div style="margin-bottom:1.5rem;">';
+                html += '<div style="font-size:0.65rem;letter-spacing:2px;color:var(--text-dim);margin-bottom:0.8rem;">REPLIES</div>';
+                replies.forEach(function(r) {
+                    html += '<div style="padding:0.8rem;border:1px solid var(--glass-border);border-radius:10px;margin-bottom:0.5rem;background:rgba(255,255,255,0.03);">';
+                    html += '<div style="display:flex;justify-content:space-between;margin-bottom:0.4rem;">';
+                    html += '<span style="font-size:0.7rem;font-weight:600;color:var(--cyan);">' + r.author + '</span>';
+                    html += '<span style="font-size:0.6rem;color:var(--text-dim);">' + formatDate(r.date) + '</span>';
+                    html += '</div>';
+                    html += '<div style="font-size:0.85rem;color:var(--text-muted);line-height:1.5;">' + r.content + '</div>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            }
+
+            html += '<div style="margin-bottom:1.5rem;">';
+            html += '<textarea id="reply-input-' + t.id + '" placeholder="Write a reply..." rows="3" style="width:100%;background:var(--input-bg);border:1px solid var(--glass-border);padding:0.8rem;color:var(--text);font-family:Inter,sans-serif;font-size:0.85rem;outline:none;border-radius:10px;transition:0.3s;resize:vertical;min-height:60px;" onfocus="this.style.borderColor=\'var(--red)\'" onblur="this.style.borderColor=\'var(--glass-border)\'"></textarea>';
+            html += '</div>';
+
+            html += '<div class="paste-view-actions" style="display:flex;gap:0.5rem;flex-wrap:wrap;">';
+            if (t.status === 'open') {
+                html += '<button class="btn-neon" onclick="closeTicket(' + t.id + ')">Close Ticket</button>';
+            } else {
+                html += '<button class="btn-neon" onclick="reopenTicket(' + t.id + ')">Reopen</button>';
+            }
+            html += '<button class="btn-neon" onclick="replyTicket(' + t.id + ')" style="border-color:var(--cyan);color:var(--cyan);">Reply</button>';
+            html += '<button class="btn-neon" onclick="deleteTicket(' + t.id + ')" style="border-color:var(--magenta);color:var(--magenta);">Delete</button>';
+            html += '<button class="btn-neon" onclick="backToList()">Back</button>';
+            html += '</div></div>';
+
+            document.getElementById('tickets-list').style.display = 'none';
+            document.getElementById('ticket-detail').style.display = '';
+            document.getElementById('ticket-detail').innerHTML = html;
+        }
+
+        function closeTicket(id) {
+            apiUpdateTicket(id, { status: 'closed' }).then(function() { return loadTickets(); }).then(function() { backToList(); });
+        }
+
+        function reopenTicket(id) {
+            apiUpdateTicket(id, { status: 'open' }).then(function() { return loadTickets(); }).then(function() { viewTicket(id); });
+        }
+
+        function replyTicket(id) {
+            var input = document.getElementById('reply-input-' + id);
+            var msg = input.value.trim();
+            if (!msg) return;
+            apiReplyTicket(id, msg).then(function() { return loadTickets(); }).then(function() { viewTicket(id); });
+        }
+
+        function deleteTicket(id) {
+            var overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:200;display:flex;align-items:center;justify-content:center;animation:modalIn 0.2s ease;';
+            var box = document.createElement('div');
+            box.style.cssText = 'background:var(--glass);border:1px solid var(--glass-border);padding:2rem;border-radius:16px;max-width:400px;width:90%;text-align:center;backdrop-filter:blur(20px);';
+            box.innerHTML = '<div style="font-size:1rem;margin-bottom:1rem;color:var(--text);">Delete this ticket?</div><div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1.5rem;">This cannot be undone.</div><div style="display:flex;gap:0.8rem;justify-content:center;"><button class="btn-neon" id="confirm-delete" style="border-color:var(--red);color:var(--red);">Delete</button><button class="btn-neon" id="cancel-delete">Cancel</button></div>';
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+
+            document.getElementById('confirm-delete').addEventListener('click', function() {
+                apiDeleteTicket(id).then(function() { return loadTickets(); }).then(function() {
+                    document.body.removeChild(overlay);
+                    backToList();
+                });
+            });
+            document.getElementById('cancel-delete').addEventListener('click', function() {
+                document.body.removeChild(overlay);
+            });
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) document.body.removeChild(overlay);
+            });
+        }
+
+        function backToList() {
+            document.getElementById('tickets-list').style.display = '';
+            document.getElementById('ticket-detail').style.display = 'none';
+            document.getElementById('ticket-detail').innerHTML = '';
+            renderTickets(currentFilter);
+        }
+
+        loadUsers().then(function() { return loadTickets(); }).then(function() { renderTickets('all'); });
+    </script>
+    <script>
+        var _tok2 = localStorage.getItem('cybersec-token');
+        if (_tok2) {
+            document.querySelectorAll('.nav-links a[href="login.html"]').forEach(function(el) { el.remove(); });
+        }
+    </script>
+</body>
+</html>

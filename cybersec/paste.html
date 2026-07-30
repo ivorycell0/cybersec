@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cybersec | Paste</title>
+    <link rel="stylesheet" href="style.css">
+    <script>if(!localStorage.getItem('cybersec-token')){location.href='login.html';}</script>
+</head>
+<body>
+    <canvas id="snowfall"></canvas>
+
+    <nav>
+        <div class="logo">CYBERSEC</div>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="services.html">Services</a></li>
+            <li><a href="sandbox.html">Sandbox</a></li>
+            <li><a href="blog.html">Blog</a></li>
+            <li><a href="tickets.html">Tickets</a></li>
+            <li><a href="login.html">Login</a></li>
+        </ul>
+        <div class="hamburger" onclick="toggleNav()">&#9776;</div>
+    </nav>
+
+    <main>
+        <section class="page-content">
+            <h1 class="glitch" data-text="PASTE">PASTE</h1>
+            <p class="tagline">Share code, logs, and text snippets</p>
+
+            <div id="paste-list-view">
+                <div class="chat-container">
+                    <button class="btn-neon" id="make-paste-btn" style="margin-bottom:1.5rem;width:100%;">+ Make a Paste</button>
+                    <div class="paste-bin-table">
+                        <div class="paste-bin-header">
+                            <span>Title</span>
+                            <span>Comments</span>
+                            <span>Views</span>
+                            <span>Author</span>
+                            <span>Added</span>
+                        </div>
+                        <div id="paste-feed"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="paste-form-view" style="display:none">
+                <div class="chat-container" style="max-width:600px">
+                    <form class="chat-form" id="paste-form">
+                        <input type="text" id="paste-title" placeholder="Paste title" autocomplete="off" style="font-size:1rem;padding:0.8rem">
+                        <textarea id="paste-content" placeholder="Paste your code, logs, or text here..." rows="12" style="font-size:0.9rem"></textarea>
+                        <label class="anon-label"><input type="checkbox" id="paste-anon"> Post anonymously</label>
+                        <div style="display:flex;gap:0.8rem;margin-top:0.5rem">
+                            <button type="submit" class="btn-neon" style="flex:1">Create Paste</button>
+                            <button type="button" class="btn-neon" id="cancel-paste-btn" style="flex:1;background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1)">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div id="paste-view" style="display:none">
+                <div class="chat-container">
+                    <a href="paste.html" class="paste-back">&larr; Back to pastes</a>
+                    <div id="paste-view-deleted-banner" class="chat-login-msg" style="display:none">This paste was deleted. Only admins can see it.</div>
+                    <div class="paste-view-card">
+                        <div class="paste-view-head">
+                            <span class="paste-view-title" id="paste-view-title"></span>
+                            <span class="paste-view-meta" id="paste-view-meta"></span>
+                        </div>
+                        <div class="paste-view-body" id="paste-view-body"></div>
+                        <div class="paste-view-actions" id="paste-view-actions"></div>
+                    </div>
+                    <div class="chat-feed" style="margin-top:2rem">
+                        <div class="chat-feed-header">COMMENTS</div>
+                        <div id="comment-login-msg" class="chat-login-msg" style="display:none">You must be logged in to comment.</div>
+                        <form class="chat-form" id="comment-form" style="display:none">
+                            <textarea id="comment-content" placeholder="Write a comment..." rows="2"></textarea>
+                            <button type="submit" class="btn-neon" style="align-self:flex-end">Post Comment</button>
+                        </form>
+                        <div id="comment-feed" style="margin-top:1.5rem"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+    <script src="api.js"></script>
+    <script>
+        var ROLE_COLORS = { owner:'#ff0040','co-owner':'#ff00aa',dev:'#8800ff',admin:'#00e5ff',mod:'#00cc88',regular:'#8888aa' };
+        var ROLE_LABEL = { owner:'\u265B Owner','co-owner':'\u265B Co-Owner',dev:'Dev',admin:'Admin',mod:'Mod',regular:'' };
+
+        var _cachedUsers = [];
+
+        function loadUsers() {
+            return apiGetUsers().then(function(users) {
+                _cachedUsers = users;
+                users.forEach(function(u) { if (!u.role) u.role = 'regular'; });
+                var cs = users.find(function(u) { return u.username.toLowerCase() === 'cs'; });
+                if (cs) cs.role = 'owner';
+                return users;
+            }).catch(function() { return []; });
+        }
+
+        function getUserData(username) {
+            return _cachedUsers.find(function(x) { return x.username.toLowerCase() === username.toLowerCase(); });
+        }
+
+        function getUserRole(username) {
+            var u = getUserData(username);
+            return u ? u.role : 'regular';
+        }
+
+        function getTagColor(username, fallback) {
+            var u = getUserData(username);
+            if (!u) return fallback || '#8888aa';
+            if (u.tagStyle === 'rainbow') return ROLE_COLORS[u.role] || fallback || '#8888aa';
+            return u.tagColor || ROLE_COLORS[u.role] || fallback || '#8888aa';
+        }
+
+        function getTagStyle(username) {
+            var u = getUserData(username);
+            return (u && u.tagStyle) || 'glossy';
+        }
+
+        function getDisplayTag(username) {
+            var u = getUserData(username);
+            if (!u) return '';
+            if (u.customTag && u.customTag.trim()) return u.customTag.trim();
+            return ROLE_LABEL[u.role] || '';
+        }
+
+        var session = localStorage.getItem('cybersec-session');
+        var sessionRole = 'regular';
+        var isAdmin = false;
+
+        function fmtShortDate(ts) {
+            var d = new Date(ts);
+            var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+        }
+
+        function fmtDate(ts) {
+            var d = new Date(ts);
+            return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+        }
+
+        function formatViews(n) {
+            if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+            return String(n);
+        }
+
+        function countComments(paste) {
+            if (!paste.comments) return 0;
+            return paste.comments.filter(function(c) { return !c.deleted; }).length;
+        }
+
+        /* ---- Seed demo data if empty ---- */
+        (function seedData() {
+            apiGetUsers().then(function(users) {
+                if (users.length > 0) return;
+                var demoUsers = [
+                    { username: 'cs', password: 'cs', role: 'owner' },
+                    { username: 'rickie', password: 'rickie!1', role: 'regular' },
+                    { username: 'jacked', password: 'jacked!1', role: 'admin' },
+                    { username: 'support', password: 'support!1', role: 'mod' },
+                    { username: 'alice', password: 'alice!1', role: 'regular' },
+                    { username: 'bob', password: 'bob!1', role: 'mod' },
+                    { username: 'charlie', password: 'charlie!1', role: 'admin' },
+                    { username: 'dave', password: 'dave!1', role: 'dev' },
+                    { username: 'eve', password: 'eve!1', role: 'co-owner' },
+                ];
+                var p = demoUsers.map(function(u) { return apiSignup(u.username, u.password).then(function() { return apiUpdateUser(u.username, { role: u.role }); }); });
+                return Promise.all(p);
+            }).then(function() {
+                return apiGetPastes();
+            }).then(function(pastes) {
+                if (pastes.length > 0) return;
+                var demo = [
+                    { title: 'Hellstar Void Falls', content: 'Deep within the void, the hellstar falls...\n\nFull analysis and documentation of the Hellstar Void anomaly. This paste contains everything we know so far about the signal degradation patterns observed since April 2026.', author: 'rickie', anonymous: false, time: Date.now() - 102 * 24 * 60 * 60 * 1000, comments: [{ id: 'c1', author: 'alice', content: 'This is insane.', time: Date.now() - 100 * 24 * 60 * 60 * 1000, deleted: false }, { id: 'c2', author: 'bob', content: 'Can you share more data?', time: Date.now() - 99 * 24 * 60 * 60 * 1000, deleted: false }, { id: 'c3', author: 'charlie', content: 'I found similar patterns in sector 7.', time: Date.now() - 98 * 24 * 60 * 60 * 1000, deleted: false }, { id: 'c4', author: 'dave', content: 'Check the frequency logs again.', time: Date.now() - 95 * 24 * 60 * 60 * 1000, deleted: false }, { id: 'c5', author: 'eve', content: 'We need to alert the network.', time: Date.now() - 90 * 24 * 60 * 60 * 1000, deleted: false }], views: 1047 },
+                    { title: 'CLICK IF U LIKE FRAUD AND MONEY', content: 'methods and techniques\n\n1. Carding basics\n2. Social engineering\n3. Phishing templates\n4. Cashout methods\n5. OPSEC guidelines\n\nUse at your own risk.', author: 'cs', anonymous: false, time: Date.now() - 2 * 24 * 60 * 60 * 1000, comments: [{ id: 'c6', author: 'cs', content: 'Scam lol', time: Date.now() - 1 * 24 * 60 * 60 * 1000, deleted: false }], views: 2903 },
+                    { title: 'One Week Left', content: 'Only one week left until the deadline.\n\nMake sure all reports are submitted before the cutoff. No extensions will be granted. Final checks must be completed by end of day Friday.', author: 'jacked', anonymous: false, time: Date.now() - 16 * 24 * 60 * 60 * 1000, comments: [{ id: 'c7', author: 'alice', content: 'Got it, working on it now.', time: Date.now() - 15 * 24 * 60 * 60 * 1000, deleted: false }], views: 20243 },
+                    { title: 'DeepIntel OSINT Tool', content: 'DeepIntel OSINT Tool v2.4\n\nFeatures:\n- Domain enumeration\n- Email harvesting\n- Social media scraping\n- DNS analysis\n- WHOIS lookups\n\nInstallation:\ngit clone https://github.com/deepintel/osint.git\ncd osint\npip install -r requirements.txt\npython main.py', author: 'support', anonymous: false, time: Date.now() - 104 * 24 * 60 * 60 * 1000, comments: [], views: 54120 },
+                ];
+                var chain = Promise.resolve();
+                demo.forEach(function(d) {
+                    chain = chain.then(function() {
+                        return apiCreatePaste(d.title, d.content, d.anonymous).then(function(p) {
+                            var updates = { views: d.views };
+                            return apiUpdatePaste(p.id, updates);
+                        });
+                    });
+                });
+                return chain;
+            });
+        })();
+
+        var params = new URLSearchParams(window.location.search);
+        var viewId = params.get('id');
+
+        if (viewId) {
+            document.getElementById('paste-list-view').style.display = 'none';
+            document.getElementById('paste-form-view').style.display = 'none';
+            document.getElementById('paste-view').style.display = '';
+            loadUsers().then(function() {
+                sessionRole = session ? getUserRole(session) : 'regular';
+                isAdmin = sessionRole === 'owner' || sessionRole === 'co-owner' || sessionRole === 'admin';
+                loadPasteView(viewId);
+            });
+        } else {
+            document.getElementById('paste-list-view').style.display = '';
+            document.getElementById('paste-form-view').style.display = 'none';
+            document.getElementById('paste-view').style.display = 'none';
+            loadUsers().then(function() {
+                sessionRole = session ? getUserRole(session) : 'regular';
+                isAdmin = sessionRole === 'owner' || sessionRole === 'co-owner' || sessionRole === 'admin';
+                initListView();
+            });
+        }
+
+        function initListView() {
+            var pasteFeed = document.getElementById('paste-feed');
+
+            document.getElementById('make-paste-btn').addEventListener('click', function() {
+                document.getElementById('paste-list-view').style.display = 'none';
+                document.getElementById('paste-form-view').style.display = '';
+            });
+
+            document.getElementById('cancel-paste-btn').addEventListener('click', function() {
+                document.getElementById('paste-list-view').style.display = '';
+                document.getElementById('paste-form-view').style.display = 'none';
+                document.getElementById('paste-title').value = '';
+                document.getElementById('paste-content').value = '';
+                document.getElementById('paste-anon').checked = false;
+            });
+
+            function renderList() {
+                apiGetPastes().then(function(all) {
+                    var visible = all.filter(function(p) { return !p.deleted; });
+                    visible.reverse();
+                    if (visible.length === 0) {
+                        pasteFeed.innerHTML = '<div class="paste-bin-empty">No pastes yet.</div>';
+                        return;
+                    }
+                    pasteFeed.innerHTML = visible.map(function(p) {
+                        var anon = p.anonymous;
+                        var displayName = anon ? 'Anonymous' : p.author;
+                        var role = anon ? 'regular' : getUserRole(p.author);
+                        var color = anon ? '#666680' : getTagColor(p.author, ROLE_COLORS[role]);
+                        var label = anon ? '' : getDisplayTag(p.author);
+                        var styleClass = !anon ? ' tag-' + getTagStyle(p.author) : '';
+                        var authorHtml = label ? '<span class="paste-role-tag' + styleClass + '" style="color:' + color + ';border-color:' + color + '">[' + label + ']</span> ' + displayName : displayName;
+                        var isYou = !anon && session && session.toLowerCase() === p.author.toLowerCase();
+                        var title = p.title ? p.title.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '(untitled)';
+                        var cmtCount = countComments(p);
+                        var views = formatViews(p.views || 0);
+                        return '<a href="paste.html?id=' + p.id + '" class="paste-bin-row' + (isYou ? ' paste-row-you' : '') + '">' +
+                            '<span class="paste-bin-cell paste-bin-title">' + title + '</span>' +
+                            '<span class="paste-bin-cell paste-bin-cmt">' + cmtCount + '</span>' +
+                            '<span class="paste-bin-cell paste-bin-views">' + views + '</span>' +
+                            '<span class="paste-bin-cell paste-bin-author">' + authorHtml + '</span>' +
+                            '<span class="paste-bin-cell paste-bin-added">' + fmtShortDate(p.time) + '</span>' +
+                        '</a>';
+                    }).join('');
+                });
+            }
+
+            renderList();
+            setInterval(renderList, 5000);
+        }
+
+        document.getElementById('paste-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            var pasteTitle = document.getElementById('paste-title');
+            var pasteContent = document.getElementById('paste-content');
+            var pasteAnon = document.getElementById('paste-anon');
+            var content = pasteContent.value.trim();
+            if (!content) return;
+            apiCreatePaste(pasteTitle.value.trim(), content, pasteAnon.checked).then(function() {
+                pasteTitle.value = '';
+                pasteContent.value = '';
+                pasteAnon.checked = false;
+                window.location.href = 'paste.html';
+            });
+        });
+
+        function loadPasteView(id) {
+            var view = document.getElementById('paste-view');
+            apiGetPaste(id).then(function(paste) {
+                if (!paste) {
+                    view.innerHTML = '<div class="chat-container"><div class="chat-login-msg">Paste not found.</div><a href="paste.html" class="paste-back">&larr; Back to pastes</a></div>';
+                    return;
+                }
+
+                var isOwner = session && session.toLowerCase() === paste.author.toLowerCase();
+                var showContent = !paste.deleted || isAdmin;
+
+                if (paste.deleted) {
+                    document.getElementById('paste-view-deleted-banner').style.display = '';
+                    if (!isAdmin) {
+                        view.innerHTML = '<div class="chat-container"><div class="chat-login-msg">This paste has been deleted.</div><a href="paste.html" class="paste-back">&larr; Back to pastes</a></div>';
+                        return;
+                    }
+                }
+
+                var anon = paste.anonymous;
+                var displayName = anon ? 'Anonymous' : paste.author;
+                var role = anon ? 'regular' : getUserRole(paste.author);
+                var color = anon ? '#666680' : getTagColor(paste.author, ROLE_COLORS[role]);
+                var label = anon ? '' : getDisplayTag(paste.author);
+                var styleClass = !anon ? ' tag-' + getTagStyle(paste.author) : '';
+                var staffTag = (label && role !== 'regular') ? '<span class="paste-role-tag' + styleClass + '" style="color:' + color + ';border-color:' + color + '">[' + label + ']</span> ' : '';
+
+                document.getElementById('paste-view-title').textContent = paste.title || '(untitled)';
+                document.getElementById('paste-view-meta').innerHTML =
+                    'Posted by ' + staffTag + '<span style="color:' + color + '">' + displayName + '</span>' +
+                    ' on ' + fmtDate(paste.time) +
+                    ' &middot; ' + formatViews(paste.views || 0) + ' views' +
+                    ' &middot; ' + countComments(paste) + ' comments';
+
+                document.getElementById('paste-view-body').innerHTML = '<pre>' + paste.content.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>';
+
+                var actions = document.getElementById('paste-view-actions');
+                actions.innerHTML = '';
+                if (isOwner || isAdmin) {
+                    var delBtn = document.createElement('button');
+                    delBtn.className = 'btn-neon';
+                    delBtn.style.cssText = 'padding:0.4rem 1.2rem;font-size:0.75rem;background:rgba(255,0,64,0.15);border-color:rgba(255,0,64,0.4);';
+                    delBtn.textContent = paste.deleted ? 'Permanently Delete' : 'Delete Paste';
+                    delBtn.addEventListener('click', function() {
+                        if (paste.deleted) {
+                            if (!confirm('Permanently delete this paste? This cannot be undone.')) return;
+                            apiDeletePaste(paste.id).then(function() { window.location.href = 'paste.html'; });
+                        } else {
+                            apiUpdatePaste(paste.id, { deleted: true }).then(function() { window.location.href = 'paste.html'; });
+                        }
+                    });
+                    actions.appendChild(delBtn);
+                }
+
+                /* Comments */
+                var commentLoginMsg = document.getElementById('comment-login-msg');
+                var commentForm = document.getElementById('comment-form');
+                var commentContent = document.getElementById('comment-content');
+                var commentFeed = document.getElementById('comment-feed');
+
+                if (session && showContent) { commentLoginMsg.style.display = 'none'; commentForm.style.display = ''; }
+                else { commentLoginMsg.style.display = ''; commentForm.style.display = 'none'; }
+                if (!showContent) { commentLoginMsg.textContent = 'Comments are unavailable.'; commentLoginMsg.style.display = ''; }
+
+                function renderComments() {
+                    apiGetPaste(id).then(function(current) {
+                        var cmts = (current && current.comments) || [];
+                        var visible = isAdmin ? cmts : cmts.filter(function(c) { return !c.deleted; });
+                        if (visible.length === 0) {
+                            commentFeed.innerHTML = '<div class="chat-empty">No comments yet.</div>';
+                            return;
+                        }
+                        commentFeed.innerHTML = visible.map(function(c) {
+                            var cRole = getUserRole(c.author);
+                            var cColor = getTagColor(c.author, ROLE_COLORS[cRole]);
+                            var cLabel = getDisplayTag(c.author);
+                            var cStyle = ' tag-' + getTagStyle(c.author);
+                            var cTag = (cLabel && cRole !== 'regular') ? '<span class="paste-role-tag' + cStyle + '" style="color:' + cColor + ';border-color:' + cColor + '">[' + cLabel + ']</span> ' : '';
+                            var canDelComment = isAdmin;
+                            return '<div class="chat-msg">' +
+                                '<div class="chat-msg-head">' +
+                                    ((!c.deleted && cTag) ? cTag : '') +
+                                    '<span class="chat-msg-author" style="color:' + cColor + '">' + (c.deleted ? '(deleted)' : c.author) + '</span>' +
+                                    '<span class="chat-msg-time">' + fmtShortDate(c.time) + '</span>' +
+                                    (canDelComment && !c.deleted ? '<button class="chat-msg-del" data-cid="' + c.id + '" title="Delete">&#10005;</button>' : '') +
+                                    (c.deleted && isAdmin ? '<span style="font-size:0.6rem;color:#666;margin-left:auto">DELETED</span>' : '') +
+                                '</div>' +
+                                '<div class="chat-msg-content">' + (c.deleted ? '<em style="color:#555">This comment was deleted.</em>' : c.content.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')) + '</div>' +
+                            '</div>';
+                        }).join('');
+                        commentFeed.querySelectorAll('.chat-msg-del').forEach(function(btn) {
+                            btn.addEventListener('click', function() {
+                                var cid = btn.getAttribute('data-cid');
+                                apiDeleteComment(id, cid).then(function() { renderComments(); });
+                            });
+                        });
+                    });
+                }
+
+                commentForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    var text = commentContent.value.trim();
+                    if (!text) return;
+                    apiAddComment(id, text).then(function() {
+                        commentContent.value = '';
+                        renderComments();
+                    });
+                });
+
+                renderComments();
+                setInterval(renderComments, 5000);
+            }).catch(function() {
+                view.innerHTML = '<div class="chat-container"><div class="chat-login-msg">Paste not found.</div><a href="paste.html" class="paste-back">&larr; Back to pastes</a></div>';
+            });
+        }
+    </script>
+    <script>
+        var _tok = localStorage.getItem('cybersec-token');
+        if (_tok) {
+            document.querySelectorAll('.nav-links a[href="login.html"]').forEach(function(el) { el.remove(); });
+            apiGetUsers().then(function(users) {
+                var u = users.find(function(x) { return x.username === localStorage.getItem('cybersec-session'); });
+                var r = u ? u.role : 'regular';
+                if (['owner','co-owner','dev','admin'].indexOf(r) === -1) {
+                    document.querySelectorAll('.nav-links a[href="tickets.html"]').forEach(function(el) { el.remove(); });
+                }
+            });
+        }
+    </script>
+</body>
+</html>

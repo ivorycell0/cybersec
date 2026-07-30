@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cybersec | Code Sandbox</title>
+    <link rel="stylesheet" href="style.css">
+    <script>if(!localStorage.getItem('cybersec-token')){location.href='login.html';}</script>
+</head>
+<body>
+    <canvas id="snowfall"></canvas>
+
+    <nav>
+        <div class="logo">CYBERSEC</div>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="services.html">Services</a></li>
+            <li><a href="sandbox.html" class="active">Sandbox</a></li>
+            <li><a href="blog.html">Blog</a></li>
+            <li><a href="tickets.html">Tickets</a></li>
+            <li><a href="login.html">Login</a></li>
+        </ul>
+        <div class="hamburger" onclick="toggleNav()">&#9776;</div>
+    </nav>
+
+    <main>
+        <section class="page-content">
+            <h1 class="glitch" data-text="CODE SANDBOX">CODE SANDBOX</h1>
+            <div class="sandbox-container">
+                <div class="sandbox-editor">
+                    <div class="sandbox-toolbar">
+                        <span class="sandbox-lang">HTML / CSS / JS</span>
+                        <button id="sandbox-run" class="btn-neon">&#9654; Run</button>
+                    </div>
+                    <textarea id="sandbox-code" spellcheck="false"><h1>Hello, Cybersec!</h1>
+<p>Edit this code and click <strong>Run</strong> to see the result.</p>
+<style>
+  body { background: #111; color: #0f0; font-family: monospace; text-align: center; padding: 2rem; }
+</style>
+<script>
+  document.querySelector('h1').style.color = '#ff0000';
+</script></textarea>
+                </div>
+                <div class="sandbox-output">
+                    <div class="sandbox-toolbar">
+                        <span class="sandbox-lang">Output</span>
+                        <button id="sandbox-clear" class="btn-neon" style="padding:0.3rem 1rem;font-size:0.8rem;">Clear</button>
+                    </div>
+                    <iframe id="sandbox-frame" sandbox="allow-scripts"></iframe>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+    <script src="api.js"></script>
+    <script>
+        const codeArea = document.getElementById('sandbox-code');
+        const runBtn = document.getElementById('sandbox-run');
+        const clearBtn = document.getElementById('sandbox-clear');
+        const frame = document.getElementById('sandbox-frame');
+
+        function runCode() {
+            const code = codeArea.value;
+            const blob = new Blob([code], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            frame.src = url;
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        function clearOutput() {
+            frame.srcdoc = '';
+        }
+
+        runBtn.addEventListener('click', runCode);
+        clearBtn.addEventListener('click', clearOutput);
+
+        document.addEventListener('DOMContentLoaded', runCode);
+    </script>
+    <script>
+        var _tok = localStorage.getItem('cybersec-token');
+        if (_tok) {
+            document.querySelectorAll('.nav-links a[href="login.html"]').forEach(function(el) { el.remove(); });
+            var _session = localStorage.getItem('cybersec-session');
+            apiGetUsers().then(function(users) {
+                var u = users.find(function(x) { return x.username === _session; });
+                var r = u ? u.role : 'regular';
+                if (['owner','co-owner','dev','admin'].indexOf(r) === -1) {
+                    document.querySelectorAll('.nav-links a[href="tickets.html"]').forEach(function(el) { el.remove(); });
+                }
+            });
+        }
+    </script>
+</body>
+</html>
