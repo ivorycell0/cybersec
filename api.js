@@ -1,117 +1,42 @@
-/* Cybersec GitHub API — stores all data in repo's data.json */
-var GH_OWNER = 'ivorycell0';
-var GH_REPO = 'cybersec';
-var GH_TOKEN = localStorage.getItem('gh-token') || '';
-var GH_BRANCH = 'master';
-var _dataCache = null;
-var _dataSha = localStorage.getItem('gh-sha') || null;
-var _pendingWrites = 0;
+/* Cybersec — pure localStorage, no server, no API */
+var DATA_KEY = 'cybersec-data';
 
-function ghApiUrl() {
-  return 'https://api.github.com/repos/' + GH_OWNER + '/' + GH_REPO + '/contents/data.json';
-}
-
-function ghHeaders(method) {
-  var h = { 'Accept': 'application/vnd.github.v3+json' };
-  if (GH_TOKEN) h['Authorization'] = 'token ' + GH_TOKEN;
-  if (method === 'PUT') h['Content-Type'] = 'application/json';
-  return h;
-}
-
-function btoaUTF8(str) {
-  var bytes = [];
-  for (var i = 0; i < str.length; i++) {
-    var c = str.charCodeAt(i);
-    if (c < 128) bytes.push(c);
-    else if (c < 2048) { bytes.push(192 | (c >> 6)); bytes.push(128 | (c & 63)); }
-    else if (c < 65536) { bytes.push(224 | (c >> 12)); bytes.push(128 | ((c >> 6) & 63)); bytes.push(128 | (c & 63)); }
-    else { bytes.push(240 | (c >> 18)); bytes.push(128 | ((c >> 12) & 63)); bytes.push(128 | ((c >> 6) & 63)); bytes.push(128 | (c & 63)); }
+function getData() {
+  var raw = localStorage.getItem(DATA_KEY);
+  if (!raw) {
+    var d = { users: [], chat: [], pastes: [], tickets: [], visitors: 0 };
+    localStorage.setItem(DATA_KEY, JSON.stringify(d));
+    return d;
   }
-  return btoa(String.fromCharCode.apply(null, bytes));
+  return JSON.parse(raw);
 }
 
-function atobUTF8(b64) {
-  return decodeURIComponent(Array.prototype.map.call(atob(b64), function(c) {
-    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-  }).join(''));
+function saveData(d) {
+  localStorage.setItem(DATA_KEY, JSON.stringify(d));
 }
 
-function readData() {
-  return fetch(ghApiUrl(), { headers: ghHeaders() }).then(function(r) {
-    if (r.status === 404) {
-      var initial = { users: [], chat: [], pastes: [], tickets: [], visitors: 0 };
-      return writeDataRaw(initial).then(function() { _dataCache = initial; return initial; });
-    }
-    return r.json().then(function(d) {
-      _dataSha = d.sha;
-      localStorage.setItem('gh-sha', _dataSha);
-      _dataCache = JSON.parse(atobUTF8(d.content));
-      return _dataCache;
-    });
-  }).catch(function() {
-    if (_dataCache) return _dataCache;
-    return { users: [], chat: [], pastes: [], tickets: [], visitors: 0 };
-  });
-}
-
-function writeDataRaw(data) {
-  var content = btoaUTF8(JSON.stringify(data));
-  var body = { message: 'update', content: content, branch: GH_BRANCH };
-  if (_dataSha) body.sha = _dataSha;
-  return fetch(ghApiUrl(), {
-    method: 'PUT',
-    headers: ghHeaders('PUT'),
-    body: JSON.stringify(body)
-  }).then(function(r) {
-    if (r.status === 409) {
-      // Conflict — re-read and retry
-      _dataSha = null;
-      return readData().then(function() { return writeDataRaw(data); });
-    }
-    if (!r.ok) throw new Error('GitHub API error: ' + r.status);
-    return r.json().then(function(d) {
-      _dataSha = d.content.sha;
-      localStorage.setItem('gh-sha', _dataSha);
-    });
-  });
-}
-
-function writeData() {
-  if (_pendingWrites > 0) { _pendingWrites++; return; }
-  _pendingWrites++;
-  writeDataRaw(_dataCache).then(function() {
-    _pendingWrites = 0;
-    if (_pendingWrites > 0) { _pendingWrites = 0; writeData(); }
-  }).catch(function() { _pendingWrites = 0; });
-}
-
-function ensureCache() {
-  if (_dataCache) return Promise.resolve(_dataCache);
-  return readData();
-}
-
-// --- AUTH ---
 function apiLogin(username, password) {
-  return ensureCache().then(function(data) {
-    var users = data.users;
-    users.forEach(function(u) { if (!u.role) u.role = 'regular'; });
-    var cs = users.find(function(u) { return u.username.toLowerCase() === 'cs'; });
+  return new Promise(function(resolve, reject) {
+    var data = getData();
+    data.users.forEach(function(u) { if (!u.role) u.role = 'regular'; });
+    var cs = data.users.find(function(u) { return u.username.toLowerCase() === 'cs'; });
     if (cs) cs.role = 'owner';
-    var found = users.find(function(u) { return u.username.toLowerCase() === username.toLowerCase() && u.password === password; });
-    if (!found) throw new Error('Invalid credentials');
+    var found = data.users.find(function(u) { return u.username.toLowerCase() === username.toLowerCase() && u.password === password; });
+    if (!found) return reject(new Error('Invalid credentials'));
     localStorage.setItem('cybersec-session', found.username);
-    return { user: { username: found.username, role: found.role } };
+    resolve({ user: { username: found.username, role: found.role } });
   });
 }
 
 function apiSignup(username, password) {
-  return ensureCache().then(function(data) {
+  return new Promise(function(resolve, reject) {
+    var data = getData();
     if (data.users.find(function(u) { return u.username.toLowerCase() === username.toLowerCase(); })) {
-      throw new Error('Username taken');
+      return reject(new Error('Username taken'));
     }
     data.users.push({ username: username, password: password, role: 'regular' });
-    writeData();
-    return { success: true };
+    saveData(data);
+    resolve({ success: true });
   });
 }
 
@@ -120,163 +45,149 @@ function apiLogout() {
   return Promise.resolve();
 }
 
-// --- USERS ---
 function apiGetUsers() {
-  return ensureCache().then(function(data) {
-    return data.users.map(function(u) { return { username: u.username, role: u.role, tagStyle: u.tagStyle, tagColor: u.tagColor, customTag: u.customTag }; });
-  });
+  var data = getData();
+  return Promise.resolve(data.users.map(function(u) { return { username: u.username, role: u.role, tagStyle: u.tagStyle, tagColor: u.tagColor, customTag: u.customTag }; }));
 }
 
 function apiUpdateUser(username, updates) {
-  return ensureCache().then(function(data) {
-    var u = data.users.find(function(x) { return x.username.toLowerCase() === username.toLowerCase(); });
-    if (!u) throw new Error('User not found');
-    var allowed = ['role', 'tagStyle', 'tagColor', 'customTag'];
-    allowed.forEach(function(k) { if (updates[k] !== undefined) u[k] = updates[k]; });
-    writeData();
-  });
+  var data = getData();
+  var u = data.users.find(function(x) { return x.username.toLowerCase() === username.toLowerCase(); });
+  if (!u) return Promise.reject(new Error('User not found'));
+  var allowed = ['role', 'tagStyle', 'tagColor', 'customTag'];
+  allowed.forEach(function(k) { if (updates[k] !== undefined) u[k] = updates[k]; });
+  saveData(data);
+  return Promise.resolve();
 }
 
 function apiDeleteUser(username) {
-  return ensureCache().then(function(data) {
-    data.users = data.users.filter(function(x) { return x.username.toLowerCase() !== username.toLowerCase(); });
-    writeData();
-  });
+  var data = getData();
+  data.users = data.users.filter(function(x) { return x.username.toLowerCase() !== username.toLowerCase(); });
+  saveData(data);
+  return Promise.resolve();
 }
 
-// --- CHAT ---
 function apiGetChat() {
-  return ensureCache().then(function(data) { return data.chat || []; });
+  return Promise.resolve(getData().chat || []);
 }
 
 function apiPostChat(content) {
-  return ensureCache().then(function(data) {
-    var msg = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), author: localStorage.getItem('cybersec-session'), content: content, time: Date.now() };
-    data.chat.push(msg);
-    writeData();
-    return msg;
-  });
+  var data = getData();
+  var msg = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), author: localStorage.getItem('cybersec-session'), content: content, time: Date.now() };
+  data.chat.push(msg);
+  saveData(data);
+  return Promise.resolve(msg);
 }
 
 function apiDeleteChat(id) {
-  return ensureCache().then(function(data) {
-    data.chat = data.chat.filter(function(m) { return m.id !== id; });
-    writeData();
-  });
+  var data = getData();
+  data.chat = data.chat.filter(function(m) { return m.id !== id; });
+  saveData(data);
+  return Promise.resolve();
 }
 
-// --- PASTES ---
 function apiGetPastes() {
-  return ensureCache().then(function(data) { return data.pastes || []; });
+  return Promise.resolve(getData().pastes || []);
 }
 
 function apiCreatePaste(title, content, anonymous) {
-  return ensureCache().then(function(data) {
-    var paste = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), author: localStorage.getItem('cybersec-session'), title: title, content: content, time: Date.now(), anonymous: !!anonymous, deleted: false, comments: [], views: 0 };
-    data.pastes.push(paste);
-    writeData();
-    return paste;
-  });
+  var data = getData();
+  var paste = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), author: localStorage.getItem('cybersec-session'), title: title, content: content, time: Date.now(), anonymous: !!anonymous, deleted: false, comments: [], views: 0 };
+  data.pastes.push(paste);
+  saveData(data);
+  return Promise.resolve(paste);
 }
 
 function apiGetPaste(id) {
-  return ensureCache().then(function(data) {
-    var paste = data.pastes.find(function(p) { return p.id === id; });
-    if (!paste) return null;
-    paste.views = (paste.views || 0) + 1;
-    writeData();
-    return paste;
-  });
+  var data = getData();
+  var paste = data.pastes.find(function(p) { return p.id === id; });
+  if (!paste) return Promise.resolve(null);
+  paste.views = (paste.views || 0) + 1;
+  saveData(data);
+  return Promise.resolve(paste);
 }
 
 function apiUpdatePaste(id, updates) {
-  return ensureCache().then(function(data) {
-    var paste = data.pastes.find(function(p) { return p.id === id; });
-    if (!paste) throw new Error('Not found');
-    if (updates.deleted !== undefined) paste.deleted = updates.deleted;
-    if (updates.title !== undefined) paste.title = updates.title;
-    if (updates.content !== undefined) paste.content = updates.content;
-    if (updates.views !== undefined) paste.views = updates.views;
-    writeData();
-    return paste;
-  });
+  var data = getData();
+  var paste = data.pastes.find(function(p) { return p.id === id; });
+  if (!paste) return Promise.reject(new Error('Not found'));
+  if (updates.deleted !== undefined) paste.deleted = updates.deleted;
+  if (updates.title !== undefined) paste.title = updates.title;
+  if (updates.content !== undefined) paste.content = updates.content;
+  if (updates.views !== undefined) paste.views = updates.views;
+  saveData(data);
+  return Promise.resolve(paste);
 }
 
 function apiDeletePaste(id) {
-  return ensureCache().then(function(data) {
-    data.pastes = data.pastes.filter(function(p) { return p.id !== id; });
-    writeData();
-  });
+  var data = getData();
+  data.pastes = data.pastes.filter(function(p) { return p.id !== id; });
+  saveData(data);
+  return Promise.resolve();
 }
 
 function apiAddComment(pasteId, content) {
-  return ensureCache().then(function(data) {
-    var paste = data.pastes.find(function(p) { return p.id === pasteId; });
-    if (!paste) throw new Error('Not found');
-    if (!paste.comments) paste.comments = [];
-    var comment = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), author: localStorage.getItem('cybersec-session'), content: content, time: Date.now(), deleted: false };
-    paste.comments.push(comment);
-    writeData();
-    return comment;
-  });
+  var data = getData();
+  var paste = data.pastes.find(function(p) { return p.id === pasteId; });
+  if (!paste) return Promise.reject(new Error('Not found'));
+  if (!paste.comments) paste.comments = [];
+  var comment = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), author: localStorage.getItem('cybersec-session'), content: content, time: Date.now(), deleted: false };
+  paste.comments.push(comment);
+  saveData(data);
+  return Promise.resolve(comment);
 }
 
 function apiDeleteComment(pasteId, commentId) {
-  return ensureCache().then(function(data) {
-    var paste = data.pastes.find(function(p) { return p.id === pasteId; });
-    if (!paste) return;
-    var comment = (paste.comments || []).find(function(c) { return c.id === commentId; });
-    if (comment) comment.deleted = true;
-    writeData();
-  });
+  var data = getData();
+  var paste = data.pastes.find(function(p) { return p.id === pasteId; });
+  if (!paste) return Promise.resolve();
+  var comment = (paste.comments || []).find(function(c) { return c.id === commentId; });
+  if (comment) comment.deleted = true;
+  saveData(data);
+  return Promise.resolve();
 }
 
-// --- TICKETS ---
 function apiGetTickets() {
-  return ensureCache().then(function(data) { return data.tickets || []; });
+  return Promise.resolve(getData().tickets || []);
 }
 
 function apiCreateTicket(subject, message, priority) {
-  return ensureCache().then(function(data) {
-    var ticket = { id: Date.now(), subject: subject, message: message, author: localStorage.getItem('cybersec-session'), date: new Date().toISOString(), status: 'open', priority: priority || 'low', replies: [] };
-    data.tickets.push(ticket);
-    writeData();
-    return ticket;
-  });
+  var data = getData();
+  var ticket = { id: Date.now(), subject: subject, message: message, author: localStorage.getItem('cybersec-session'), date: new Date().toISOString(), status: 'open', priority: priority || 'low', replies: [] };
+  data.tickets.push(ticket);
+  saveData(data);
+  return Promise.resolve(ticket);
 }
 
 function apiUpdateTicket(id, updates) {
-  return ensureCache().then(function(data) {
-    var ticket = data.tickets.find(function(t) { return t.id === id; });
-    if (!ticket) throw new Error('Not found');
-    if (updates.status) ticket.status = updates.status;
-    writeData();
-    return ticket;
-  });
+  var data = getData();
+  var ticket = data.tickets.find(function(t) { return t.id === id; });
+  if (!ticket) return Promise.reject(new Error('Not found'));
+  if (updates.status) ticket.status = updates.status;
+  saveData(data);
+  return Promise.resolve(ticket);
 }
 
 function apiDeleteTicket(id) {
-  return ensureCache().then(function(data) {
-    data.tickets = data.tickets.filter(function(t) { return t.id !== id; });
-    writeData();
-  });
+  var data = getData();
+  data.tickets = data.tickets.filter(function(t) { return t.id !== id; });
+  saveData(data);
+  return Promise.resolve();
 }
 
 function apiReplyTicket(id, content) {
-  return ensureCache().then(function(data) {
-    var ticket = data.tickets.find(function(t) { return t.id === id; });
-    if (!ticket) throw new Error('Not found');
-    if (!ticket.replies) ticket.replies = [];
-    ticket.replies.push({ author: localStorage.getItem('cybersec-session'), content: content, date: new Date().toISOString() });
-    writeData();
-    return ticket;
-  });
+  var data = getData();
+  var ticket = data.tickets.find(function(t) { return t.id === id; });
+  if (!ticket) return Promise.reject(new Error('Not found'));
+  if (!ticket.replies) ticket.replies = [];
+  ticket.replies.push({ author: localStorage.getItem('cybersec-session'), content: content, date: new Date().toISOString() });
+  saveData(data);
+  return Promise.resolve(ticket);
 }
 
 function apiGetVisitor() {
-  return ensureCache().then(function(data) {
-    data.visitors = (data.visitors || 0) + 1;
-    writeData();
-    return { count: data.visitors };
-  });
+  var data = getData();
+  data.visitors = (data.visitors || 0) + 1;
+  saveData(data);
+  return Promise.resolve({ count: data.visitors });
 }
